@@ -1,0 +1,360 @@
+import os
+import numpy as np
+import gymnasium as gym
+from gymnasium import spaces
+from pathlib import Path
+import pandas as pd
+from Agente.Set_input_param import ACTIVE_DOF_INDICES, EPISODE_LENGTH, ACTION_SCALE
+
+
+# ============================================================
+# CONFIGURAZIONE
+# ============================================================
+
+# Definisci il percorso assoluto della cartella Ambiente
+AMBIENTE_DIR = Path(__file__).parent.parent.resolve()
+
+# Percorsi assoluti
+SURROGATE_MODEL_PATH = str(AMBIENTE_DIR / "Data" / "models" / "best_model.keras")
+SCALER_PATH = str(AMBIENTE_DIR / "Data" / "models" / "scalers.joblib")
+
+print(f"DEBUG: SURROGATE_MODEL_PATH = {SURROGATE_MODEL_PATH}")
+print(f"DEBUG: File esiste? {os.path.exists(SURROGATE_MODEL_PATH)}")
+print(f"DEBUG: SCALER_PATH = {SCALER_PATH}")
+print(f"DEBUG: File esiste? {os.path.exists(SCALER_PATH)}")
+
+# Range fisici dei 7 DOF — valori reali del dataset
+DOF_BOUNDS_ALL = [
+    (0.084,   0.140),    # DOF_PITCH_GEOM
+    (0.034,  19.966),    # DOF_BETA1_GEOM
+    (-69.996, -60.121),  # DOF_BETA2_GEOM_
+    (0.0,     0.745),    # DOF_W1_GEOM
+    (0.001,   0.999),    # DOF_W2_GEOM
+    (-0.149,  0.199),    # DOF_TMOVXU_GEOM_
+    (-0.150,  0.200),    # DOF_TMOVXL_GEOM_
+]
+
+# -------------------------------------------------------
+# SELEZIONE DOF ATTIVI
+# Cambia questa lista per aggiungere DOF man mano
+# Es: [0]       → solo PITCH
+#     [0, 1]    → PITCH + BETA1
+#     list(range(7)) → tutti e 7
+# -------------------------------------------------------
+
+# Applica la selezione
+DOF_BOUNDS = [DOF_BOUNDS_ALL[i] for i in ACTIVE_DOF_INDICES]
+
+# Nomi colonne DOF e OF
+DOF_NAMES_ALL = [
+    "DOF_PITCH", "DOF_BETA1", "DOF_BETA2",
+    "DOF_W1", "DOF_W2", "DOF_TMOVXU", "DOF_TMOVXL"
+]
+OF_NAMES = [
+    "OF_alfa_ex", "OF_Cpt",      "OF_CSI",
+    "OF_phi",     "OF_psi",      "OF_Zwi",
+    "OF_Zwc",     "OF_DFss_mis", "OF_DFss_cp",
+    "OF_Mis_peak","OF_s_peak",   "OF_s_diff_dim",
+    "OF_s_tot_SS","OF_Tmax",     "OF_X_Tmax"
+]
+
+# Indice CSI — usato nella reward attuale
+IDX_CSI = OF_NAMES.index("OF_CSI")
+
+# Indici commentati — da attivare quando aggiungi compute_efficiency
+"""IDX_CPT = OF_NAMES.index("OF_Cpt")
+IDX_PSI = OF_NAMES.index("OF_psi")
+IDX_PHI = OF_NAMES.index("OF_phi")"""
+
+# ============================================================
+# CARICAMENTO SURROGATE KERAS
+# ============================================================
+
+def load_surrogate(model_path=SURROGATE_MODEL_PATH,
+                   scaler_path=SCALER_PATH):
+    import tensorflow as tf
+    import joblib
+
+    # CArica il modello surrogato (la rete neurale che ho addestrato)
+    print(f"\n  Caricamento surrogate: {model_path}")
+    keras_model = tf.keras.models.load_model(model_path)
+
+    # Carica il dizionario joblib con entrambi gli scaler
+    print(f"  Caricamento scaler: {scaler_path}")
+    scalers  = joblib.load(scaler_path)
+    scaler_X = scalers['scaler_X']   # per scalare i DOF in input
+    scaler_y = scalers['scaler_y']   # per de-scalare gli OF in output
+
+    # Converte i parametri dello scaler_X in costanti numpy
+    # per evitare overhead sklearn ad ogni chiamata
+    scaler_type = type(scaler_X).__name__
+    print(f"  Tipo scaler_X: {scaler_type}")
+    print(f"  Tipo scaler_y: {type(scaler_y).__name__}")
+
+    # In base allo scaler che ho utilizzato, definisco funzioni di scaling e inverse scaling
+    if scaler_type == "MinMaxScaler":
+        # transform(x) = (x - data_min_) / data_range_
+        X_offset_ = scaler_X.data_min_.astype(np.float32)
+        X_scale_ = scaler_X.data_range_.astype(np.float32)
+
+        def _scale_X(x):
+            return (x - X_offset_) / (X_scale_ + 1e-8)
+
+    elif scaler_type == "StandardScaler":
+        # transform(x) = (x - mean_) / scale_
+        X_offset_ = scaler_X.mean_.astype(np.float32)
+        X_scale_ = scaler_X.scale_.astype(np.float32)
+
+        def _scale_X(x):
+            return (x - X_offset_) / (X_scale_ + 1e-8)
+
+    else:
+        # Fallback generico: usa sklearn direttamente
+        print(f"  Scaler non riconosciuto ({scaler_type}), uso sklearn.transform()")
+
+        def _scale_X(x):
+            return scaler_X.transform(x.reshape(1, -1))[0].astype(np.float32)
+
+    # Stessa logica per scaler_y (inverse transform)
+    scaler_y_type = type(scaler_y).__name__
+    if scaler_y_type == "MinMaxScaler":
+        y_offset_ = scaler_y.data_min_.astype(np.float32)
+        y_scale_ = scaler_y.data_range_.astype(np.float32)
+
+        def _inverse_scale_y(y):
+            return y * y_scale_ + y_offset_
+
+    elif scaler_y_type == "StandardScaler":
+        y_offset_ = scaler_y.mean_.astype(np.float32)
+        y_scale_ = scaler_y.scale_.astype(np.float32)
+
+        def _inverse_scale_y(y):
+            return y * y_scale_ + y_offset_
+
+    else:
+        def _inverse_scale_y(y):
+            return scaler_y.inverse_transform(y.reshape(1, -1))[0].astype(np.float32)
+
+    # Compila il modello come funzione TF statica —
+    # la prima chiamata è lenta (compilazione), le successive veloci
+    @tf.function(input_signature=[
+        tf.TensorSpec(shape=[1, keras_model.input_shape[-1]], dtype=tf.float32)
+    ])
+    def fast_infer(x):
+        return keras_model(x, training=False)
+
+    def predict(dof_raw):
+        """
+        dof_raw: np.array shape (7,) — DOF in unità fisiche reali
+        Restituisce: np.array shape (15,) — OF in unità fisiche reali
+
+        Pipeline:
+            DOF grezzi
+              → normalizzazione (numpy, veloce)
+              → inferenza rete (tf.function, veloce)
+              → de-normalizzazione OF (numpy, veloce)
+              → OF in unità fisiche reali
+        """
+        # 1. Scala i DOF con i parametri estratti
+        x_scaled = _scale_X(dof_raw.astype(np.float32))
+        x_tensor = x_scaled.reshape(1, -1).astype(np.float32)
+
+        # 2. Inferenza veloce con tf.function
+        of_scaled = fast_infer(tf.constant(x_tensor)).numpy()
+
+        # 3. De-scala gli OF → valori fisici reali
+        of_real = _inverse_scale_y(of_scaled[0])
+
+        return of_real.astype(np.float32)
+
+    # Warm-up: prima chiamata lenta (compilazione grafo TF)
+    print("  Warm-up tf.function (prima chiamata)...")
+    dummy = np.zeros(keras_model.input_shape[-1], dtype=np.float32)
+    predict(dummy)
+    print("  Surrogate pronta.\n")
+
+    return predict
+
+# ============================================================
+# FUNZIONE DI REWARD
+# ============================================================
+
+def compute_reward(of_current, of_previous):
+    """
+    La reward è POSITIVA quando CSI diminuisce (meno perdite).
+    La reward è NEGATIVA quando CSI aumenta (più perdite).
+
+    TODO: sostituire con compute_efficiency() quando si vuole
+    ottimizzare l'efficienza completa psi/(1+Cpt).
+    """
+    # Controllo base su valori non validi
+    if np.isnan(of_current).any() or np.isinf(of_current).any():
+        return -10.0   # surrogate fuori distribuzione
+
+    DATABASE_DIR = Path(__file__).parent.parent.resolve()
+    DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
+
+    df = pd.read_csv(DATASET_PATH)
+    riga = df.iloc[3].values
+    csi_originale = float(riga[11])
+
+    csi_curr = of_current[IDX_CSI]
+    csi_prev = of_previous[IDX_CSI]
+
+    # Invertito: reward positiva se CSI scende
+    return float(csi_prev - csi_curr)
+
+
+# ============================================================
+# AMBIENTE GYMNASIUM CUSTOM
+# ============================================================
+
+class BladeOptimEnv(gym.Env):
+    """
+    Ambiente Gymnasium per l'ottimizzazione del profilo palare.
+
+    STRUTTURA ATTUALE (1 DOF attivo):
+      Stato  : [DOF_PITCH normalizzato (1)] + [15 OF] = 16 valori
+      Azione : [delta PITCH] = 1 valore in [-1, +1]
+      Reward : CSI_prev - CSI_curr  (minimizza perdite comprimibili)"""
+
+    metadata = {"render_modes": ["human"]}
+
+    def __init__(self, surrogate_fn, start_dof=None,
+                 episode_length=EPISODE_LENGTH,
+                 action_scale=ACTION_SCALE):
+        super().__init__()
+
+        self.predict      = surrogate_fn
+        self.start_dof    = start_dof
+        self.ep_length    = episode_length
+        self.action_scale = action_scale
+
+        n_active_dof = len(DOF_BOUNDS)          # DOF che l'agente può modificare
+        n_of         = len(OF_NAMES)             # 15 OF prodotti dalla surrogate
+
+        # Bounds solo per i DOF attivi
+        self.dof_low   = np.array([b[0] for b in DOF_BOUNDS], dtype=np.float32)
+        self.dof_high  = np.array([b[1] for b in DOF_BOUNDS], dtype=np.float32)
+        self.dof_range = self.dof_high - self.dof_low
+
+        # Bounds per tutti e 7 i DOF (per campionare i DOF fissi all'inizio)
+        self.dof_low_all  = np.array([b[0] for b in DOF_BOUNDS_ALL], dtype=np.float32)
+        self.dof_high_all = np.array([b[1] for b in DOF_BOUNDS_ALL], dtype=np.float32)
+
+        # --- SPAZIO AZIONI ---
+        # Solo i DOF attivi: ogni valore in [-1, +1]
+        self.action_space = spaces.Box(
+            low=-1.0, high=1.0,
+            shape=(n_active_dof,),
+            dtype=np.float32
+        )
+
+        # --- SPAZIO OSSERVAZIONI ---
+        # DOF attivi normalizzati [0,1] + tutti i 15 OF
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf,
+            shape=(n_active_dof + n_of,),
+            dtype=np.float32
+        )
+
+        # Stato interno
+        self.current_dof_active = None   # solo i DOF che l'agente modifica
+        self.current_dof_full   = None   # tutti e 7 i DOF (per la surrogate)
+        self.current_of         = None
+        self.step_count         = 0
+
+    def _build_obs(self, dof_active, of_vals):
+        """
+        Osservazione = DOF attivi normalizzati in [0,1] + OF grezzi.
+        La normalizzazione aiuta la rete PPO a lavorare su scale comparabili.
+        """
+        dof_norm = (dof_active - self.dof_low) / (self.dof_range + 1e-8)
+        return np.concatenate([dof_norm, of_vals]).astype(np.float32)
+
+    def _get_observation(self):
+        # Estrai solo i DOF attivi dal vettore completo
+        self.current_dof_active = self.current_dof_full[ACTIVE_DOF_INDICES].copy()
+
+        # Costruisci l'osservazione: DOF normalizzati + OF
+        return self._build_obs(self.current_dof_active, self.current_of)
+
+    def reset(self, seed=None, options=None):
+        """
+        Reset Gymnasium-compliant con parametri seed e options.
+        """
+        super().reset(seed=seed)
+
+        # Inizializza DOF e calcola OF
+        if self.start_dof is not None:
+            self.current_dof_full = np.array(self.start_dof, dtype=np.float32)
+        else:
+            self.current_dof_full = self.np_random.uniform(
+                self.dof_low_all, self.dof_high_all
+            ).astype(np.float32)
+
+        self.current_of = self.predict(self.current_dof_full)
+        self.step_count = 0
+
+        obs = self._get_observation()
+        return obs, {}
+
+    def step(self, action):
+        """
+        Applica l'azione dell'agente:
+        1. Modifica solo i DOF attivi
+        2. I DOF non attivi restano invariati
+        3. Valuta il profilo completo con la surrogate
+        4. Reward = CSI_prev - CSI_curr
+        """
+        self.step_count += 1
+
+        prev_of = self.current_of.copy()
+
+        # Calcola delta solo per i DOF attivi
+        '''delta = action * self.action_scale * self.dof_range
+
+        # Aggiorna i DOF attivi nel vettore completo (7 DOF)
+        new_dof_full = self.current_dof_full.copy()
+        new_dof_active = self.current_dof_active + delta
+        new_dof_active = np.clip(new_dof_active, self.dof_low, self.dof_high)
+
+        # Scrivi i DOF aggiornati nel vettore completo
+        for i, idx in enumerate(ACTIVE_DOF_INDICES):
+            new_dof_full[idx] = new_dof_active[i]'''
+
+        # Mappa l'azione da [-1, 1] direttamente al range fisico [dof_low, dof_high]
+        # Azione -1.0 -> self.dof_low
+        # Azione +1.0 -> self.dof_high
+        new_dof_active = self.dof_low + (action + 1.0) / 2.0 * self.dof_range
+
+        # Aggiorna il profilo completo
+        new_dof_full = self.current_dof_full.copy()
+        for i, idx in enumerate(ACTIVE_DOF_INDICES):
+            new_dof_full[idx] = new_dof_active[i]
+
+        # Valuta il nuovo profilo (surrogate riceve sempre tutti e 7 i DOF)
+        new_of = self.predict(new_dof_full).astype(np.float32)
+
+        # Reward semplificata: minimizza CSI
+        reward = compute_reward(new_of, prev_of)
+
+        # Aggiorna stato interno
+        self.current_dof_active = new_dof_active
+        self.current_dof_full   = new_dof_full
+        self.current_of         = new_of
+
+        terminated = False
+        truncated  = self.step_count >= self.ep_length
+
+        obs  = self._build_obs(self.current_dof_active, self.current_of)
+        info = {
+            "efficiency" : None,       # da attivare con compute_efficiency()
+            "csi"        : float(new_of[IDX_CSI]),
+            "dof_active" : self.current_dof_active.copy(),
+            "dof_full"   : self.current_dof_full.copy(),
+            "of"         : self.current_of.copy(),
+        }
+
+        return obs, reward, terminated, truncated, info
+
