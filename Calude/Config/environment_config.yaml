@@ -1,0 +1,303 @@
+# ============================================================================
+# BLADE OPTIMIZATION RL - ENVIRONMENT CONFIGURATION
+# ============================================================================
+# Configurazione dettagliata dell'ambiente custom Gymnasium
+
+project:
+  name: "BladeOptimizationEnv"
+  version: "1.0"
+
+# ============================================================================
+# ENVIRONMENT BASICS
+# ============================================================================
+
+environment:
+  framework: "gymnasium"
+  render_mode: null                  # 'human', 'rgb_array', o null (no rendering)
+  
+  # Horizon (max steps per episodio)
+  max_steps: 50
+  auto_reset: true
+
+# ============================================================================
+# OBSERVATION SPACE
+# ============================================================================
+# Lo stato dell'ambiente: quali informazioni vede l'agente?
+
+observation_space:
+  
+  type: "box"                        # Continuous observation
+  dtype: "float32"
+  
+  components:
+    - name: "dof_values"
+      description: "Current DOF values (normalized)"
+      shape: 7
+      bounds: [-1.0, 1.0]            # Normalizzati a [-1, 1]
+      normalization: "minmax"
+    
+    - name: "objectives"
+      description: "Current objective function values"
+      shape: 15
+      bounds: [0.0, 1.0]
+      normalization: "minmax"
+  
+  total_shape: 22                    # 7 + 15
+  
+  description: "State = [normalized_DOF, normalized_OF]"
+
+# ============================================================================
+# ACTION SPACE
+# ============================================================================
+# Come l'agente modifica i DOF?
+
+action_space:
+  
+  type: "continuous"                 # Azioni continue
+  dtype: "float32"
+  
+  shape: 7                           # Un'azione per ogni DOF
+  bounds: [-1.0, 1.0]                # Normalizzate a [-1, 1]
+  
+  # Come mappiamo azioni normalizzate a modifiche DOF reali?
+  action_scaling:
+    type: "step_fraction"            # Azione = frazione del range DOF
+    step_multiplier: 0.1             # Max 10% del range per step
+    
+    # Oppure specifico per ogni DOF:
+    dof_specific:
+      PITCH:
+        max_step: 2.0                # Max 2 gradi per step
+        scale: 0.1
+      TWIST_A:
+        max_step: 1.0
+        scale: 0.1
+      TWIST_B:
+        max_step: 1.0
+        scale: 0.1
+      CHORD:
+        max_step: 0.05               # Max 5% di variazione
+        scale: 0.1
+      OFFSET_X:
+        max_step: 0.01
+        scale: 0.1
+      OFFSET_Y:
+        max_step: 0.01
+        scale: 0.1
+      OFFSET_Z:
+        max_step: 0.01
+        scale: 0.1
+
+# ============================================================================
+# REWARD FUNCTION
+# ============================================================================
+# Come viene calcolato il reward?
+
+reward_function:
+  
+  type: "composite"
+  scaling: "tanh"                    # Normalizza output finale a [-1, 1]
+  
+  # Componente 1: CSI Improvement
+  csi_improvement:
+    enabled: true
+    weight: 0.6
+    type: "relative_improvement"     # (old - new) / (old + eps)
+    
+    direction: "minimize"             # CSI è un costo, vogliamo minimizzare
+    reference_value: "baseline_csi"   # Comparare con baseline
+    
+    # Scaling della componente
+    scale_min: -1.0
+    scale_max: 1.0
+    improvement_threshold: 0.01      # Ignore improvements < 1%
+  
+  # Componente 2: Efficiency Improvement
+  efficiency_improvement:
+    enabled: true
+    weight: 0.3
+    type: "relative_improvement"
+    
+    direction: "maximize"             # Vogliamo massimizzare efficienza
+    reference_value: "baseline_efficiency"
+    
+    scale_min: -1.0
+    scale_max: 1.0
+    improvement_threshold: 0.005
+  
+  # Componente 3: Drag Reduction
+  drag_reduction:
+    enabled: false
+    weight: 0.1
+    type: "relative_improvement"
+    direction: "minimize"
+    reference_value: "baseline_drag"
+    scale_min: -1.0
+    scale_max: 1.0
+  
+  # Componente 4: Constraint Penalty
+  constraint_penalty:
+    enabled: true
+    weight: -0.2                     # Negativo = penalità
+    type: "violation_count"
+    
+    # Applica penalità se:
+    violations:
+      dof_out_of_bounds:
+        enabled: true
+        penalty: 0.1                 # Penalità per ogni DOF fuori bounds
+      objective_violation:
+        enabled: true
+        penalty: 0.05
+  
+  # Componente 5: Encouraging Exploration
+  exploration_bonus:
+    enabled: false
+    weight: 0.05
+    type: "action_magnitude"         # Bonus per azioni "diverse"
+    threshold: 0.5
+
+# ============================================================================
+# STATE REPRESENTATION
+# ============================================================================
+# Come rappresentiamo lo stato nel nostro environment?
+
+state_representation:
+  
+  dof_normalization:
+    method: "minmax"                 # o 'zscore', 'robust'
+    bounds: [-1.0, 1.0]
+    include_raw: false               # Includere anche DOF denormalizzati?
+  
+  objectives_normalization:
+    method: "minmax"
+    bounds: [0.0, 1.0]
+    include_raw: false
+  
+  # Metriche derivate (opzionali)
+  derived_features:
+    include_delta:                   # Includere variazione rispetto a step precedente?
+      enabled: false
+      features: ["dof_delta", "objective_delta"]
+    
+    include_ratio:                   # Includere rapporti tra obiettivi?
+      enabled: false
+      features: ["efficiency_over_drag"]
+
+# ============================================================================
+# BASELINE PROFILE
+# ============================================================================
+# Qual è il profilo di riferimento per il calcolo del reward?
+
+baseline_profile:
+  
+  source: "dataset_statistics"       # 'fixed_values', 'dataset_mean', 'best_in_dataset'
+  
+  # Se fixed_values:
+  dof_values: null                   # Verranno sovrascritti da load_baseline()
+  
+  # Se dataset_mean o dataset_best:
+  computation: "mean"                # 'mean', 'median', 'best'
+
+# ============================================================================
+# INITIALIZATION
+# ============================================================================
+# Come inizializziamo l'environment ad ogni reset()?
+
+initialization:
+  
+  initial_dof:
+    type: "baseline"                 # 'baseline', 'random', 'dataset_sample'
+    random_seed: 42
+    random_scale: 0.1                # Se random: variazione % da baseline
+  
+  initial_objectives:
+    compute: true                    # Computare direttamente col surrogate
+    from_database: false             # O usare valori da database se disponibili
+
+# ============================================================================
+# STEP FUNCTION BEHAVIOR
+# ============================================================================
+# Come funziona il passo?
+
+step_behavior:
+  
+  # Update dello stato dopo azione
+  state_update:
+    deterministic: true              # Surrogate è deterministico (sempre lo stesso output)
+    include_noise: false             # Aggiungere rumore al predetto?
+    noise_scale: 0.01                # % di rumore gaussiano
+  
+  # Termination condition
+  termination:
+    episode_length_limit: true       # Stop quando si raggiungono max_steps?
+    reward_threshold: null            # Stop se reward supera soglia? (null = disabled)
+    convergence_check: false         # Stop se policy ha convergito? (advanced)
+  
+  # Truncation (raggiungere limit senza vera terminazione)
+  truncation:
+    max_steps: 50                    # Truncate dopo 50 steps
+    max_steps_no_improvement: 20     # Truncate se 20 step senza miglioramento
+
+# ============================================================================
+# LOGGING & MONITORING
+# ============================================================================
+
+monitoring:
+  
+  # Informazioni registrate durante step
+  log_on_step:
+    enabled: true
+    log_rewards: true
+    log_constraints: true
+    log_dof_changes: true
+    log_objective_changes: true
+  
+  # Statistiche a fine episodio
+  episode_stats:
+    compute: true
+    stats:
+      - "total_reward"
+      - "mean_reward"
+      - "max_reward"
+      - "min_reward"
+      - "constraint_violations"
+      - "objective_improvements"
+      - "trajectory_length"
+
+# ============================================================================
+# ADVANCED OPTIONS
+# ============================================================================
+
+advanced:
+  
+  # Curriculum learning
+  curriculum:
+    enabled: false
+    stages:
+      - name: "easy"
+        dof_active: ["PITCH"]
+        constraint_penalty_scale: 0.5
+        timesteps: 10000
+      - name: "medium"
+        dof_active: ["PITCH", "TWIST_A", "TWIST_B"]
+        constraint_penalty_scale: 0.8
+        timesteps: 30000
+      - name: "hard"
+        dof_active: "all"
+        constraint_penalty_scale: 1.0
+        timesteps: null
+  
+  # Domain randomization (simulare variabilità surrogate?)
+  domain_randomization:
+    enabled: false
+    surrogate_noise: 0.02             # % di rumore sul surrogate
+    dof_noise: 0.01                   # % di rumore sui DOF
+  
+  # Multi-objective handling
+  multi_objective:
+    method: "weighted_sum"            # 'weighted_sum', 'pareto', 'scalarization'
+    scalarization_weights:
+      CSI: 0.6
+      Efficiency: 0.3
+      Drag: 0.1

@@ -1,0 +1,208 @@
+# ============================================================
+# Blade Optimization RL - Training Configuration
+# ============================================================
+
+# Project Information
+project:
+  name: "Blade Optimization RL"
+  step: 999
+  description: "PPO-based aerodynamic profile optimization"
+  author: "Your Name"
+  date: "2024"
+
+# ============================================================
+# PPO Training Parameters (da Set_input_param.py)
+# ============================================================
+ppo:
+  # Learning rates to test
+  learning_rates: [0.0003, 0.00003]
+  
+  # n_steps for each learning rate
+  n_steps_list: [50, 200]
+  
+  # Epoch configuration
+  n_epochs: 10
+  
+  # Discount factor
+  gamma: 0.99
+  
+  # GAE lambda
+  gae_lambda: 0.95
+  
+  # Clipping range
+  clip_range: 0.2
+  
+  # Entropy coefficient (exploration)
+  ent_coef: 0.01
+  
+  # Value function coefficient
+  vf_coef: 0.5
+  
+  # Max gradient norm
+  max_grad_norm: 0.5
+  
+  # Random seed
+  seed: 42
+  
+  # Verbose level
+  verbose: 1
+
+# ============================================================
+# Environment Parameters (da Set_input_param.py)
+# ============================================================
+environment:
+  # Episode length (max steps per episode)
+  episode_length: 20
+  
+  # Action scale (per normalized actions)
+  action_scale: 0.05
+  
+  # Total training timesteps
+  total_timesteps: 100_000
+  
+  # Policy network architecture
+  policy:
+    net_arch:
+      pi: [128, 128]      # Actor network
+      vf: [128, 128]      # Critic network
+
+# ============================================================
+# Optimization Targets
+# ============================================================
+optimization:
+  # Active DOF indices to modify
+  # 0: DOF_PITCH, 1: DOF_BETA1, 2: DOF_BETA2, etc.
+  active_dof_indices: [0]
+  
+  # Rows from database to optimize (can be list for batch)
+  row_indices: [3]
+  
+  # Objective function to minimize
+  # Options: "csi" (compressible loss), "cpt" (incompressible loss)
+  objective: "csi"
+  
+  # Combinations to test
+  # Each element is a list of DOF indices
+  dof_combinations:
+    - [0]                    # Only PITCH
+    - [0, 1]                 # PITCH + BETA1
+    - [1, 3]                 # BETA1 + W1
+    # - [0, 1, 2, 3, 4, 5, 6]  # All DOF
+
+# ============================================================
+# Data Configuration
+# ============================================================
+data:
+  # Path to raw database
+  database_path: "STEP_999/database.dat"
+  
+  # Outlier removal (IQR multiplier)
+  outlier_multiplier: 1.5
+  
+  # Data split for ANN training (train, val, test)
+  train_val_test_split: [0.7, 0.15, 0.15]
+  
+  # Preprocessing method
+  scaler_type: "zscore"  # or "minmax"
+
+# ============================================================
+# Surrogate Model Configuration
+# ============================================================
+surrogate:
+  # Path to pre-trained keras model
+  model_path: "STEP_999/ANN/models/best_model.keras"
+  
+  # Path to scalers
+  scaler_path: "STEP_999/ANN/scalers/"
+  
+  # Surrogate evaluation metrics (from validation set)
+  validate_on_test: true
+
+# ============================================================
+# Training Checkpointing
+# ============================================================
+checkpointing:
+  # Save checkpoint every N steps
+  save_freq: 10_000
+  
+  # Keep best N models
+  keep_best_k: 3
+  
+  # Save directory
+  save_dir: "STEP_999/PPO/trial_{trial_id}/checkpoints/"
+
+# ============================================================
+# Early Stopping
+# ============================================================
+early_stopping:
+  # Enable early stopping
+  enabled: true
+  
+  # Patience (steps without improvement before stopping)
+  patience: 4000
+  
+  # Metric to monitor: "csi" or "reward"
+  monitor_metric: "csi"
+
+# ============================================================
+# Logging and Visualization
+# ============================================================
+logging:
+  # TensorBoard log directory
+  tensorboard_log_dir: "STEP_999/PPO/trial_{trial_id}/logs/"
+  
+  # Results directory (plots, metrics, reports)
+  results_dir: "STEP_999/PPO/trial_{trial_id}/results/"
+  
+  # Logging frequency (steps)
+  log_freq: 100
+  
+  # Plot training history
+  plot_training_history: true
+
+# ============================================================
+# Output Files
+# ============================================================
+output:
+  # Save final model
+  save_final_model: true
+  model_filename: "ppo_model.zip"
+  
+  # Save best profile (DOF + OF)
+  save_best_profile: true
+  best_profile_filename: "best_profile.json"
+  
+  # Save training metrics
+  save_metrics: true
+  metrics_filename: "training_metrics.csv"
+  
+  # Save training report
+  save_report: true
+  report_filename: "training_report.json"
+
+# ============================================================
+# Trial Management
+# ============================================================
+trial:
+  # Trial ID (auto-incremented or specified)
+  trial_id: 1
+  
+  # Run multiple trials with different random seeds
+  num_trials: 1
+  
+  # Update seed per trial
+  update_seed_per_trial: true
+
+# ============================================================
+# Hardware Configuration
+# ============================================================
+hardware:
+  # Use GPU if available
+  use_gpu: true
+  
+  # Number of parallel environments
+  # (if > 1, requires VecEnv wrapper)
+  n_parallel_envs: 1
+  
+  # Number of CPU threads
+  n_cpu_threads: 4
