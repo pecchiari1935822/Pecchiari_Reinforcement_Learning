@@ -98,9 +98,18 @@ class BladeCallback(BaseCallback):
         for reward, info, done in zip(rewards, infos, dones):
             csi_step = info.get("csi", None)
             dof_step = info.get("dof_full", None)
+            of_step = info.get("of", None)
             if csi_step is not None:
-                self.best_csi_ep = min(self.best_csi_ep, csi_step)
-                self.best_dof_ep = dof_step.copy() if dof_step is not None else None
+                if csi_step < self.best_csi_ep:
+                    self.best_csi_ep = csi_step
+                    self.best_dof_ep = dof_step.copy() if dof_step is not None else None
+
+                if csi_step < self.best_csi:
+                    self.best_csi = csi_step
+                    self.best_dof = dof_step.copy() if dof_step is not None else None
+                    self.best_of = of_step.copy() if of_step is not None else None
+                    self.steps_senza_miglioramenti = 0
+                    self.logger.record("custom/best_CSI", self.best_csi)
             self._current_score += reward
 
 
@@ -177,7 +186,7 @@ class BladeCallback(BaseCallback):
 def train(surrogate_path=SURROGATE_MODEL_PATH,
           scaler_path=SCALER_PATH,
           start_dof=None,
-          learning_rate=None, n_steps=None, batch_size=None):
+          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None):
     print("=" * 60)
     print("  PPO Blade Optimization — Stable Baselines3")
     print(f"  DOF attivi: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}")
@@ -247,7 +256,7 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
         active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
         safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
         active_tag = "_".join(safe_names) if safe_names else "ALL"
-        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}"
+        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
         model_path = model_basename  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
@@ -269,7 +278,7 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
         active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
         safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
         active_tag = "_".join(safe_names) if safe_names else "ALL"
-        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}"
+        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
         model_path = model_basename  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
@@ -294,8 +303,8 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
     _plot_results(cb_blade, learning_rate, n_steps, training_time=training_time)
     _plot_training_metrics_actor(cb_blade, learning_rate, n_steps)
     _plot_training_metrics_critic(cb_blade, learning_rate, n_steps)
-    _plot_dof_evolution(cb_blade, learning_rate, n_steps)
-    _plot_dof_evolution_barre(cb_blade, learning_rate, n_steps)
+    _plot_dof_evolution(cb_blade, learning_rate, n_steps, start_dof=start_dof)
+    _plot_dof_evolution_barre(cb_blade, learning_rate, n_steps, start_dof=start_dof)
 
     env.close()
 
@@ -389,7 +398,7 @@ def _plot_results(cb: BladeCallback, lr, n_step, save_path="plot_results.png", t
     return save_path
 
 
-def _plot_dof_evolution(cb: BladeCallback, lr, n_step, save_path="plot_dof_evolution.png"):
+def _plot_dof_evolution(cb: BladeCallback, lr, n_step, start_dof = None, save_path="plot_dof_evolution.png"):
     """
     Crea un grafico per ogni DOF mostrando l'andamento del miglior valore trovato
     in ogni episodio per tutta la durata dell'addestramento, colorando i punti in
@@ -444,6 +453,12 @@ def _plot_dof_evolution(cb: BladeCallback, lr, n_step, save_path="plot_dof_evolu
             ma = np.convolve(y_vals, np.ones(w) / w, mode='valid')
             ax.plot(np.arange(w - 1, n_episodes), ma, color=ma_color, lw=2, label=f"Media mobile ({w} ep)")'''
 
+        if start_dof is not None:
+            start_val = start_dof[i]
+            # Mettiamo il cerchio all'episodio 0 (inizio training)
+            ax.plot(0, start_val, marker='o', color='cyan', markeredgecolor='black',
+                    markersize=10, linestyle='None', zorder=5, label="Partenza")
+
         if cb.best_dof is not None:
             best_val = cb.best_dof[i]
             # Usiamo zorder=5 per assicurarci che la X venga disegnata SOPRA le barre e le linee
@@ -473,7 +488,7 @@ def _plot_dof_evolution(cb: BladeCallback, lr, n_step, save_path="plot_dof_evolu
     return save_path
 
 
-def _plot_dof_evolution_barre(cb: BladeCallback, lr, n_step, save_path="plot_dof_evolution_barre.png"):
+def _plot_dof_evolution_barre(cb: BladeCallback, lr, n_step,start_dof = None, save_path="plot_dof_evolution_barre.png"):
     """
     Crea un grafico per ogni DOF mostrando l'andamento del miglior valore trovato
     in ogni episodio. Usa barre verticali colorate casualmente per ogni episodio.
@@ -525,6 +540,12 @@ def _plot_dof_evolution_barre(cb: BladeCallback, lr, n_step, save_path="plot_dof
             w = max(5, n_episodes // 20)
             ma = np.convolve(y_vals, np.ones(w) / w, mode='valid')
             ax.plot(np.arange(w - 1, n_episodes), ma, color=ma_color, lw=2, label=f"Media mobile ({w} ep)")'''
+
+        if start_dof is not None:
+            start_val = start_dof[i]
+            # Mettiamo il cerchio all'episodio 0 (inizio training)
+            ax.plot(0, start_val, marker='o', color='cyan', markeredgecolor='black',
+                    markersize=10, linestyle='None', zorder=5, label="Partenza")
 
         if cb.best_dof is not None:
             best_val = cb.best_dof[i]

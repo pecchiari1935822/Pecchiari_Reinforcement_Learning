@@ -312,7 +312,7 @@ class BladeOptimEnv(gym.Env):
         prev_of = self.current_of.copy()
 
         # Calcola delta solo per i DOF attivi
-        '''delta = action * self.action_scale * self.dof_range
+        delta = action * self.action_scale * self.dof_range
 
         # Aggiorna i DOF attivi nel vettore completo (7 DOF)
         new_dof_full = self.current_dof_full.copy()
@@ -321,17 +321,17 @@ class BladeOptimEnv(gym.Env):
 
         # Scrivi i DOF aggiornati nel vettore completo
         for i, idx in enumerate(ACTIVE_DOF_INDICES):
-            new_dof_full[idx] = new_dof_active[i]'''
+            new_dof_full[idx] = new_dof_active[i]
 
         # Mappa l'azione da [-1, 1] direttamente al range fisico [dof_low, dof_high]
         # Azione -1.0 -> self.dof_low
         # Azione +1.0 -> self.dof_high
-        new_dof_active = self.dof_low + (action + 1.0) / 2.0 * self.dof_range
+        '''new_dof_active = self.dof_low + (action + 1.0) / 2.0 * self.dof_range
 
         # Aggiorna il profilo completo
         new_dof_full = self.current_dof_full.copy()
         for i, idx in enumerate(ACTIVE_DOF_INDICES):
-            new_dof_full[idx] = new_dof_active[i]
+            new_dof_full[idx] = new_dof_active[i]'''
 
         # Valuta il nuovo profilo (surrogate riceve sempre tutti e 7 i DOF)
         new_of = self.predict(new_dof_full).astype(np.float32)

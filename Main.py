@@ -13,24 +13,8 @@ if __name__ == "__main__":
         scaler_path=SCALER_PATH,
         start_dof=None,
         learning_rate=learning_rate, n_steps=n_steps, batch_size=batch_size
-    )
-
-    # Valutazione finale
-    best_dof_end, best_of_eval, best_csi_eval, best_traj, best_csi_list, start_dof_vincente = evaluate(
-        model_path=model_path,
-        surrogate_path=SURROGATE_MODEL_PATH,
-        scaler_path=SCALER_PATH,
-        start_dof=None,
-        n_episodes=10,
-    )
-
-    # 2. Visualizzazioni (usa esattamente la traiettoria estratta sopra!)
-    visualize_evaluate_results(
-        best_trajectory=best_traj,
-        best_csi_steps=best_csi_list,
-        best_dof_start=start_dof_vincente,
-        best_dof_end=best_dof_end
     )'''
+
 
     # ==========================================
     # TASK 2: Ottimizzazione da riga del Dataset
@@ -163,7 +147,7 @@ if __name__ == "__main__":
                         surrogate_path=SURROGATE_MODEL_PATH,
                         scaler_path=SCALER_PATH,
                         start_dof=start_profile,
-                        learning_rate=lr, n_steps=n_step, batch_size=batch_size
+                        learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX
                     )
 
 
