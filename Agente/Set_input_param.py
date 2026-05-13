@@ -1,8 +1,8 @@
 # Parametri che descrivono lunghezza episodio e lunghezza del training
 TOTAL_TIMESTEPS = 100_000
 EPISODE_LENGTH = 20 # modifiche che possono essere fatte in un episodio
-learning_rate = [0.0003, 0.00003]
-n_steps = [50, 200]
+learning_rate = [0.00003]
+n_steps = [200]
 
 # Azione che viene fatta dall'attore che interagisce con l'ambiente
 ACTION_SCALE   = 0.05
@@ -22,7 +22,7 @@ PPO_PARAMS = dict(
 # Cosa si vuole ottimizzare (quali DOF) e in quale riga del file di input
 ROW_INDEX = [3]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
 
-ACTIVE_DOF_INDICES = [0]
+ACTIVE_DOF_INDICES = [2,3,4,5,6]  # INSERISCI GLI INDICI DEI DOF CHE VUOI OTTIMIZZARE (0-5)
 
 COPPIE_CUSTOM = [[1, 3], [2, 4], [5, 6]]
 

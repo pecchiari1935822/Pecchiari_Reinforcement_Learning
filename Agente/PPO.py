@@ -48,9 +48,13 @@ class BladeCallback(BaseCallback):
         self.episode_csi = []
         self.episode_scores = []
         self._current_score = 0.0
+        self.best_csi_ep = np.inf
         self.best_csi = np.inf
         self.best_dof = None
         self.best_of = None
+
+        self.best_dof_ep = None
+        self.episode_best_dofs = []
 
         # Metriche PPO per aggiornamento
         self.metrics = {
@@ -92,24 +96,34 @@ class BladeCallback(BaseCallback):
                     print(f"Step {self.num_timesteps}: ep_rew_mean = {ep_rew_mean:.4f}")
 
         for reward, info, done in zip(rewards, infos, dones):
+            csi_step = info.get("csi", None)
+            dof_step = info.get("dof_full", None)
+            if csi_step is not None:
+                self.best_csi_ep = min(self.best_csi_ep, csi_step)
+                self.best_dof_ep = dof_step.copy() if dof_step is not None else None
             self._current_score += reward
 
-            if done and "csi" in info:
-                csi = info["csi"]
-                self.episode_csi.append(csi)
+
+
+            if done:
+                self.episode_csi.append(self.best_csi_ep)  # Ora salvi il meglio episodio!
                 self.episode_scores.append(self._current_score)
+                self.episode_best_dofs.append(self.best_dof_ep)
                 self._current_score = 0.0
                 self.n_episodes += 1
 
-                self.logger.record("custom/CSI", csi)
+                self.logger.record("custom/CSI", self.best_csi_ep)
                 self.logger.record("custom/Score", self.episode_scores[-1])
 
-                if csi < self.best_csi:
-                    self.best_csi = csi
-                    self.steps_senza_miglioramenti = 0  # resetta contatore per early stopping
-                    self.best_dof = info["dof_full"].copy()
-                    self.best_of = info["of"].copy()
+                if self.best_csi_ep < self.best_csi:
+                    self.best_csi = self.best_csi_ep
+                    self.steps_senza_miglioramenti = 0
+                    self.best_dof = info.get("dof_full", None)
+                    self.best_of = info.get("of", None)
                     self.logger.record("custom/best_CSI", self.best_csi)
+
+                self.best_csi_ep = np.inf  # Reset per il prossimo episodio
+                self.best_dof_ep = None
 
 
         if self.steps_senza_miglioramenti >= self.patience:
@@ -277,9 +291,11 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
     training_time = end_time - start_time
 
     _print_results(cb_blade)
-    _plot_results(cb_blade, training_time=training_time)
-    _plot_training_metrics_actor(cb_blade)
-    _plot_training_metrics_critic(cb_blade)
+    _plot_results(cb_blade, learning_rate, n_steps, training_time=training_time)
+    _plot_training_metrics_actor(cb_blade, learning_rate, n_steps)
+    _plot_training_metrics_critic(cb_blade, learning_rate, n_steps)
+    _plot_dof_evolution(cb_blade, learning_rate, n_steps)
+    _plot_dof_evolution_barre(cb_blade, learning_rate, n_steps)
 
     env.close()
 
@@ -290,7 +306,7 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
 # GRAFICI — stile paper Dussauge 2023
 # ============================================================
 
-def _plot_results(cb: BladeCallback, save_path="plot_results.png", training_time=None, lr = learning_rate, n_step=n_steps):
+def _plot_results(cb: BladeCallback, lr, n_step, save_path="plot_results.png", training_time=None):
     if not cb.episode_csi:
         print("  Nessun dato da plottare.")
         return
@@ -373,7 +389,180 @@ def _plot_results(cb: BladeCallback, save_path="plot_results.png", training_time
     return save_path
 
 
-def _plot_training_metrics_actor(cb: BladeCallback, save_path="plot_metrics_actor.png", lr = learning_rate, n_step = n_steps):
+def _plot_dof_evolution(cb: BladeCallback, lr, n_step, save_path="plot_dof_evolution.png"):
+    """
+    Crea un grafico per ogni DOF mostrando l'andamento del miglior valore trovato
+    in ogni episodio per tutta la durata dell'addestramento, colorando i punti in
+    base al numero dell'episodio.
+    """
+    if not cb.episode_best_dofs:
+        print("  Nessun dato dei DOF da plottare.")
+        return
+
+    # Trasforma la lista di array in una matrice (n_episodi, 7_dof)
+    dof_data = np.array(cb.episode_best_dofs)
+    n_episodes = dof_data.shape[0]
+    ep_axis = np.arange(n_episodes)
+
+    best_ep_idx = int(np.argmin(cb.episode_csi))
+
+    np.random.seed(42)  # Fissa il seed così i colori non cambiano a ogni run
+    colori_per_episodio = np.random.uniform(0.1,0.75,size=(n_episodes, 3))
+
+    # Creiamo una griglia 4x2 standard (senza sharex)
+    fig, axes = plt.subplots(4, 2, figsize=(15, 12))
+    fig.suptitle(
+        f"Evoluzione dei DOF (Miglior profilo per Episodio)\n"
+        f"Total steps={TOTAL_TIMESTEPS:,}  n_steps={n_step}  Learning_Rate={lr}",
+        fontsize=16
+    )
+    axes_flat = axes.flatten()
+
+    for i in range(7):
+        ax = axes_flat[i]
+        y_vals = dof_data[:, i]
+
+        if i in ACTIVE_DOF_INDICES:
+            title_suffix = " (Attivo)"
+            ma_color = "black"
+
+            # Sfumatura di colore: c=ep_axis mappa il colore sul numero dell'episodio
+            # cmap='viridis' va da viola scuro (inizio), a verde (centro), a giallo (fine)
+            ax.scatter(ep_axis, y_vals, c=colori_per_episodio, s=15, alpha=0.8)
+
+            # Elemento "fantasma" per mostrare l'etichetta nella legenda
+            # (altrimenti scatter con c= array non crea un'etichetta semplice)
+            ax.plot([], [], 'o', color='mediumseagreen', markersize=5, label="Miglior DOF/Ep")
+        else:
+            title_suffix = " (Fisso)"
+            ma_color = "black"
+            ax.scatter(ep_axis, y_vals, color='gray', s=15, alpha=0.5, label="Fisso")
+
+        # Aggiungi una media mobile per vedere meglio il trend
+        '''if n_episodes > 10:
+            w = max(5, n_episodes // 20)
+            ma = np.convolve(y_vals, np.ones(w) / w, mode='valid')
+            ax.plot(np.arange(w - 1, n_episodes), ma, color=ma_color, lw=2, label=f"Media mobile ({w} ep)")'''
+
+        if cb.best_dof is not None:
+            best_val = cb.best_dof[i]
+            # Usiamo zorder=5 per assicurarci che la X venga disegnata SOPRA le barre e le linee
+            ax.plot(best_ep_idx, best_val, marker='X', color='red', markeredgecolor='black',
+                    markersize=12, linestyle='None', zorder=5, label="Miglior Assoluto")
+
+        # Disegna i limiti fisici (bounds)
+        dof_min, dof_max = DOF_BOUNDS_ALL[i]
+        ax.axhline(dof_min, color='red', ls='--', lw=1, alpha=0.5)
+        ax.axhline(dof_max, color='red', ls='--', lw=1, alpha=0.5)
+
+        ax.set_title(DOF_NAMES_ALL[i] + title_suffix, fontsize=12)
+        ax.set_xlabel("Episodio", fontsize=10)
+        ax.set_ylabel("Valore", fontsize=10)
+        ax.grid(alpha=0.3)
+
+        if i in ACTIVE_DOF_INDICES:
+            ax.legend(fontsize=8, loc='best')
+
+    # Nascondi l'ottavo grafico vuoto
+    axes_flat[7].set_visible(False)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.savefig(save_path, bbox_inches='tight', dpi=150)
+    plt.close()
+
+    return save_path
+
+
+def _plot_dof_evolution_barre(cb: BladeCallback, lr, n_step, save_path="plot_dof_evolution_barre.png"):
+    """
+    Crea un grafico per ogni DOF mostrando l'andamento del miglior valore trovato
+    in ogni episodio. Usa barre verticali colorate casualmente per ogni episodio.
+    """
+    if not cb.episode_best_dofs:
+        print("  Nessun dato dei DOF da plottare.")
+        return
+
+    # Trasforma la lista di array in una matrice (n_episodi, 7_dof)
+    dof_data = np.array(cb.episode_best_dofs)
+    n_episodes = dof_data.shape[0]
+    ep_axis = np.arange(n_episodes)
+
+    best_ep_idx = int(np.argmin(cb.episode_csi))
+
+    # Generiamo un colore RGB casuale per OGNI episodio
+    np.random.seed(42)
+    colori_per_episodio = np.random.uniform(0.1,0.75,size=(n_episodes, 3))
+
+    # Creiamo una griglia 4x2 standard
+    fig, axes = plt.subplots(4, 2, figsize=(15, 12))
+    fig.suptitle(
+        f"Evoluzione dei DOF (Miglior profilo per Episodio)\n"
+        f"Total steps={TOTAL_TIMESTEPS:,}  n_steps={n_step}  Learning_Rate={lr}",
+        fontsize=16
+    )
+    axes_flat = axes.flatten()
+
+    for i in range(7):
+        ax = axes_flat[i]
+        y_vals = dof_data[:, i]
+
+        if i in ACTIVE_DOF_INDICES:
+            title_suffix = " (Attivo)"
+            ma_color = "black"
+
+            # Disegna le BARRE colorate
+            ax.bar(ep_axis, y_vals, color="dodgerblue", width=1.0, alpha=0.9)
+
+            # Elemento fantasma per la legenda (barra vuota)
+            ax.bar([-10], [0], color='gray', label="Miglior DOF/Ep")
+        else:
+            title_suffix = " (Fisso)"
+            ma_color = "black"
+            ax.bar(ep_axis, y_vals, color='gray', width=1.0, alpha=0.5, label="Fisso")
+
+        # Aggiungi una media mobile per vedere meglio il trend
+        '''if n_episodes > 10:
+            w = max(5, n_episodes // 20)
+            ma = np.convolve(y_vals, np.ones(w) / w, mode='valid')
+            ax.plot(np.arange(w - 1, n_episodes), ma, color=ma_color, lw=2, label=f"Media mobile ({w} ep)")'''
+
+        if cb.best_dof is not None:
+            best_val = cb.best_dof[i]
+            # Usiamo zorder=5 per assicurarci che la X venga disegnata SOPRA le barre e le linee
+            ax.plot(best_ep_idx, best_val, marker='X', color='red', markeredgecolor='black',
+                    markersize=12, linestyle='None', zorder=5, label="Miglior Assoluto")
+
+        # Disegna i limiti fisici (bounds)
+        dof_min, dof_max = DOF_BOUNDS_ALL[i]
+        ax.axhline(dof_min, color='red', ls='--', lw=1, alpha=0.5)
+        ax.axhline(dof_max, color='red', ls='--', lw=1, alpha=0.5)
+
+        # --- IMPORTANTE: FORZA LO ZOOM DELL'ASSE Y ---
+        # Evita che le barre partano forzatamente da 0 rovinando la scala
+        padding = (dof_max - dof_min) * 0.1
+        if padding == 0: padding = 0.1
+        ax.set_ylim(dof_min - padding, dof_max + padding)
+
+        ax.set_title(DOF_NAMES_ALL[i] + title_suffix, fontsize=12)
+        ax.set_xlabel("Episodio", fontsize=10)
+        ax.set_ylabel("Valore", fontsize=10)
+        ax.grid(alpha=0.3)
+        ax.set_xlim(left=-1, right=n_episodes)
+
+        if i in ACTIVE_DOF_INDICES:
+            ax.legend(fontsize=8, loc='best')
+
+    # Nascondi l'ottavo grafico vuoto
+    axes_flat[7].set_visible(False)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.savefig(save_path, bbox_inches='tight', dpi=150)
+    plt.close()
+
+    return save_path
+
+
+def _plot_training_metrics_actor(cb: BladeCallback, lr, n_step, save_path="plot_metrics_actor.png"):
 
     if not cb.metrics_episodes:
         print("  Nessuna metrica PPO disponibile (training troppo corto).")
@@ -454,7 +643,7 @@ def _plot_training_metrics_actor(cb: BladeCallback, save_path="plot_metrics_acto
 
 
 
-def _plot_training_metrics_critic(cb: BladeCallback, save_path="plot_metrics_critic.png", lr = learning_rate, n_step = n_steps):
+def _plot_training_metrics_critic(cb: BladeCallback,lr , n_step, save_path="plot_metrics_critic.png"):
     if not cb.metrics_episodes:
         print("  Nessuna metrica PPO disponibile (training troppo corto).")
         return
@@ -617,7 +806,7 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
     except:
         slide_layout_img = prs.slide_layouts[1]  # Fallback
 
-    titoli_immagini = ["Risultati", "Metriche Attore", "Metriche Critico"]  # Layout Solo Titolo o Vuota
+    titoli_immagini = ["Risultati","Andamento Miglior DOF per episodio", "Andamento Miglior DOF per episodio", "Metriche Attore", "Metriche Critico"]  # Layout Solo Titolo o Vuota
     for idx, img_path in enumerate(img_paths):
         if not os.path.exists(img_path):
             continue
@@ -692,7 +881,7 @@ def pulisci_file_temporanei():
     print("=" * 60)
 
     # 1. Elimina le immagini dei grafici
-    immagini = ["plot_results.png", "plot_metrics_actor.png", "plot_metrics_critic.png"]
+    immagini = ["plot_results.png", "plot_metrics_actor.png", "plot_metrics_critic.png","plot_dof_evolution_barre.png", "plot_dof_evolution.png"]
     for img in immagini:
         if os.path.exists(img):
             os.remove(img)

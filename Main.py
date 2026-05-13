@@ -39,9 +39,9 @@ if __name__ == "__main__":
     prs = Presentation()
 
     # 1. Imposta il percorso del tuo dataset e la riga che vuoi analizzare
-    DATABASE_DIR = Path(__file__).parent.parent.resolve()
+    DATABASE_DIR = Path(__file__).parent.resolve()
     DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
-    TEMPLATE_PATH = "Template.pptx"
+    TEMPLATE_PATH = str(DATABASE_DIR / "Agente" / "Template.pptx")
 
     if os.path.exists(TEMPLATE_PATH):
         print(f"Caricamento template da: {TEMPLATE_PATH}")
@@ -159,7 +159,7 @@ if __name__ == "__main__":
 
                     # 5. Avvia il Training (Task 2)
                     print(f"\n  Learning_rate attuale : {lr}\n")
-                    model, best_dof, best_of, best_csi, model_path = train(
+                    model, best_dof, best_of, best_csi, model_ = train(
                         surrogate_path=SURROGATE_MODEL_PATH,
                         scaler_path=SCALER_PATH,
                         start_dof=start_profile,
@@ -183,8 +183,11 @@ if __name__ == "__main__":
                     print(row.to_frame().T.to_string(index=False))
 
                     path_img1 = "plot_results.png"
-                    path_img2 = "plot_metrics_actor.png"
-                    path_img3 = "plot_metrics_critic.png"
+                    path_img2 = "plot_dof_evolution.png"
+                    path_img3 = "plot_dof_evolution_barre.png"
+                    path_img4 = "plot_metrics_actor.png"
+                    path_img5 = "plot_metrics_critic.png"
+
 
                     parametri_iterazione = {
                         "N steps": n_step,
@@ -196,7 +199,7 @@ if __name__ == "__main__":
 
 
                     # 3. Aggiungi i risultati alla presentazione
-                    img_paths = [path_img1, path_img2, path_img3]
+                    img_paths = [path_img1, path_img2, path_img3, path_img4, path_img5]
 
                     start_of_originali = riga[9:24].astype(np.float32)
 
