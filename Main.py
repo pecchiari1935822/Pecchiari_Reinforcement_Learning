@@ -1,24 +1,170 @@
 import os
 import pandas as pd
 import numpy as np
-from Agente.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps
+from Agente.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES
 from Agente.PPO import DOF_BOUNDS_ALL, DOF_NAMES_ALL, PPO_PARAMS, SURROGATE_MODEL_PATH, SCALER_PATH, aggiungi_slide_iterazione, train, pulisci_file_temporanei, Presentation, Path
 
-if __name__ == "__main__":
-    # ==========================================
-    # TASK 1: Partenza casuale
-    # ==========================================
-    '''model, best_dof, best_of, best_csi, model_path = train(
-        surrogate_path=SURROGATE_MODEL_PATH,
-        scaler_path=SCALER_PATH,
-        start_dof=None,
-        learning_rate=learning_rate, n_steps=n_steps, batch_size=batch_size
-    )'''
+
+# ==========================================
+# TASK 1: Partenza casuale
+# ==========================================
+def task_1():
+
+    use_delta = None
+    episode_length = 60
+
+    prs = Presentation()
+    DATABASE_DIR = Path(__file__).parent.resolve()
+    TEMPLATE_PATH = str(DATABASE_DIR / "Agente" / "Template.pptx")
+
+    if os.path.exists(TEMPLATE_PATH):
+        print(f"\nCaricamento template da: {TEMPLATE_PATH}")
+        prs = Presentation(TEMPLATE_PATH)
+    else:
+        print(f"\n⚠️  Template non trovato. Creazione presentazione vuota.")
+
+    results = []
+
+    # Loop su run casuali
 
 
-    # ==========================================
-    # TASK 2: Ottimizzazione da riga del Dataset
-    # ==========================================
+    # Slide intro per questo run
+    slide_layout_intro = prs.slide_layouts[0]
+    slide_intro = prs.slides.add_slide(slide_layout_intro)
+
+    if slide_intro.shapes.title:
+        title_shape = slide_intro.shapes.title
+        title_shape.text = f"Task 1 - Run Casuale"
+
+    if len(slide_intro.placeholders) > 1:
+        subtitle_shape = slide_intro.placeholders[1]
+        subtitle_shape.text = "Partenza da profilo completamente casuale"
+
+    # Slide con parametri PPO
+    slide_layout_params = prs.slide_layouts[2]
+    slide_params = prs.slides.add_slide(slide_layout_params)
+
+    if slide_params.shapes.title:
+        slide_params.shapes.title.text = "Parametri PPO"
+
+    if len(slide_params.placeholders) > 1:
+        corpo_params = slide_params.placeholders[1]
+        tf_params = corpo_params.text_frame
+        tf_params.clear()
+        for key, value in PPO_PARAMS.items():
+            p = tf_params.add_paragraph()
+            if key.strip() == "":
+                p.text = ""
+            else:
+                p.text = f"{key} = {value}"
+
+    # Loop su learning_rate e n_steps
+    for lr in learning_rate:
+        for n_step in n_steps:
+
+            # Calcola batch_size
+            if n_step <= 10:
+                batch_size = 10
+            elif n_step <= 50:
+                batch_size = 32
+            else:
+                batch_size = 64
+
+            print(f"\n  Learning_rate: {lr}, N_steps: {n_step}, Batch_size: {batch_size}")
+            print(f"  {'-'*70}")
+
+            # Esegui training
+            model, best_dof, best_of, best_csi, model_path = train(
+                surrogate_path=SURROGATE_MODEL_PATH,
+                scaler_path=SCALER_PATH,
+                start_dof=None,  # ← CASUALE
+                learning_rate=lr,
+                n_steps=n_step,
+                batch_size=batch_size, use_delta =use_delta, episode_length=episode_length
+            )
+
+            print(f"  ✓ Best CSI: {best_csi:.6f}")
+            print(f"  ✓ Modello: {model_path}")
+
+            # Prepara parametri per slide
+            parametri_iterazione = {
+                "Tipo": "Casuale (No Dataset)",
+                "Episode Length": episode_length,
+                "N steps": n_step,
+                "Batch size": batch_size,
+                "Learning Rate": lr,
+                "Best CSI trovato": round(best_csi, 6),
+                "DOF attivi modificati": [f"{DOF_NAMES_ALL[i]}" for i in ACTIVE_DOF_INDICES]
+            }
+
+            # Immagini generate dal training
+            img_paths = [
+                "plot_results.png",
+                "plot_dof_evolution.png",
+                "plot_dof_evolution_barre.png",
+                "plot_metrics_actor.png",
+                "plot_metrics_critic.png"
+            ]
+
+            # Aggiungi slide con risultati
+            # NOTA: start_dof=None perché non sappiamo il profilo iniziale casuale
+            try:
+                aggiungi_slide_iterazione(
+                    prs,
+                    parametri_iterazione,
+                    img_paths,
+                    row_idx=None,  # Non c'è una riga specifica del dataset
+                    lr=lr,
+                    best_dof=best_dof,
+                    best_of=best_of,
+                    start_dof=None,  # Placeholder
+                    start_of=None
+                )
+            except Exception as e:
+                print(f"  ⚠️  Errore nell'aggiunta slide: {e}")
+
+            # Salva risultati
+            results.append({
+                'learning_rate': lr,
+                'n_steps': n_step,
+                'batch_size': batch_size,
+                'best_csi': best_csi,
+                'model_path': model_path
+            })
+
+
+
+    # Salva presentazione
+    output_pptx = "Report_Task1_Casuale_senza_delta.pptx"
+    prs.save(output_pptx)
+
+    # Salva risultati in CSV
+    df_results = pd.DataFrame(results)
+    csv_path = "task1_results.csv"
+    df_results.to_csv(csv_path, index=False)
+
+    print("\n" + "="*70)
+    print("  TASK 1 COMPLETATO!")
+    print("="*70)
+    print(f"\n  📊 Presentazione salvata: {output_pptx}")
+    print(f"  📋 Risultati salvati: {csv_path}")
+    print(f"\n  Riepilogo:")
+
+    print(f"    - Miglior CSI globale: {df_results['best_csi'].min():.6f}")
+    print(f"    - CSI medio: {df_results['best_csi'].mean():.6f}")
+    print(f"    - Std Dev: {df_results['best_csi'].std():.6f}")
+    print("\n")
+
+    pulisci_file_temporanei()
+
+
+# ==========================================
+# TASK 2: Ottimizzazione da riga del Dataset
+# ==========================================
+def task_2():
+
+    use_delta = True
+    episode_length = 20
 
     prs = Presentation()
 
@@ -147,7 +293,7 @@ if __name__ == "__main__":
                         surrogate_path=SURROGATE_MODEL_PATH,
                         scaler_path=SCALER_PATH,
                         start_dof=start_profile,
-                        learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX
+                        learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX, use_delta =use_delta, episode_length=episode_length
                     )
 
 
@@ -175,6 +321,7 @@ if __name__ == "__main__":
 
                     parametri_iterazione = {
                         "N steps": n_step,
+                        "Episode Length": episode_length,
                         "Batch size": batch_size,
                         "CSI Originale": round(csi_originale, 6),
                         "DOF attivi modificati": [f"{DOF_NAMES_ALL[i]} da {riga[i+2]} a {start_profile[i]:.3f}" for i in active_dof],
@@ -193,3 +340,7 @@ if __name__ == "__main__":
     prs.save(output_pptx)
 
     pulisci_file_temporanei()
+
+if __name__ == "__main__":
+    task_1()
+    #task_2()

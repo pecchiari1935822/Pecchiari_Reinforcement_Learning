@@ -4,7 +4,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from pathlib import Path
 import pandas as pd
-from Agente.Set_input_param import ACTIVE_DOF_INDICES, EPISODE_LENGTH, ACTION_SCALE
+from Agente.Set_input_param import ACTIVE_DOF_INDICES, ACTION_SCALE
 
 
 # ============================================================
@@ -191,13 +191,6 @@ def compute_reward(of_current, of_previous):
     if np.isnan(of_current).any() or np.isinf(of_current).any():
         return -10.0   # surrogate fuori distribuzione
 
-    DATABASE_DIR = Path(__file__).parent.parent.resolve()
-    DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
-
-    df = pd.read_csv(DATASET_PATH)
-    riga = df.iloc[3].values
-    csi_originale = float(riga[11])
-
     csi_curr = of_current[IDX_CSI]
     csi_prev = of_previous[IDX_CSI]
 
@@ -221,9 +214,11 @@ class BladeOptimEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
     def __init__(self, surrogate_fn, start_dof=None,
-                 episode_length=EPISODE_LENGTH,
-                 action_scale=ACTION_SCALE):
+                 action_scale=ACTION_SCALE, use_delta=None, episode_length=None):
         super().__init__()
+
+        self.use_delta = use_delta
+
 
         self.predict      = surrogate_fn
         self.start_dof    = start_dof
@@ -311,27 +306,28 @@ class BladeOptimEnv(gym.Env):
 
         prev_of = self.current_of.copy()
 
-        # Calcola delta solo per i DOF attivi
-        delta = action * self.action_scale * self.dof_range
+        if self.use_delta == True:
 
-        # Aggiorna i DOF attivi nel vettore completo (7 DOF)
-        new_dof_full = self.current_dof_full.copy()
-        new_dof_active = self.current_dof_active + delta
-        new_dof_active = np.clip(new_dof_active, self.dof_low, self.dof_high)
+            # Calcola delta solo per i DOF attivi
+            delta = action * self.action_scale * self.dof_range
+
+
+            # Aggiorna i DOF attivi nel vettore completo (7 DOF)
+            new_dof_full = self.current_dof_full.copy()
+            new_dof_active = self.current_dof_active + delta
+            new_dof_active = np.clip(new_dof_active, self.dof_low, self.dof_high)
+
+        else:
+            new_dof_active = self.dof_low + (action + 1.0) / 2.0 * self.dof_range
+
+            # Aggiorna il profilo completo
+            new_dof_full = self.current_dof_full.copy()
 
         # Scrivi i DOF aggiornati nel vettore completo
         for i, idx in enumerate(ACTIVE_DOF_INDICES):
             new_dof_full[idx] = new_dof_active[i]
 
-        # Mappa l'azione da [-1, 1] direttamente al range fisico [dof_low, dof_high]
-        # Azione -1.0 -> self.dof_low
-        # Azione +1.0 -> self.dof_high
-        '''new_dof_active = self.dof_low + (action + 1.0) / 2.0 * self.dof_range
 
-        # Aggiorna il profilo completo
-        new_dof_full = self.current_dof_full.copy()
-        for i, idx in enumerate(ACTIVE_DOF_INDICES):
-            new_dof_full[idx] = new_dof_active[i]'''
 
         # Valuta il nuovo profilo (surrogate riceve sempre tutti e 7 i DOF)
         new_of = self.predict(new_dof_full).astype(np.float32)

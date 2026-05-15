@@ -8,7 +8,7 @@ from Ambiente.Ambiente_claude_senza_keras import BladeOptimEnv, load_surrogate, 
 from Agente.PPO import SURROGATE_MODEL_PATH, SCALER_PATH, Path
 
 
-def ottimizza_con_modello_esistente(percorso_modello, nuovo_profilo, ep_length=20):
+def ottimizza_con_modello_esistente(percorso_modello, nuovo_profilo, ep_length):
     """
     Carica un modello PPO addestrato e lo usa per ottimizzare un nuovo profilo.
     Non esegue training, ma solo inferenza deterministica.
@@ -81,14 +81,14 @@ if __name__ == "__main__":
 
     # 2. Definisci il nuovo profilo da testare (es. riga 5 del dataset)
     df = pd.read_csv(DATASET_PATH)
-    riga_nuova_idx = 3
+    riga_nuova_idx = 710
     riga_nuova = df.iloc[riga_nuova_idx].values
     nuovo_profilo = riga_nuova[2:9].astype(np.float32).copy()
     csi_nuovo_originale = float(riga_nuova[11])
 
     # 3. Inserisci il nome esatto del file .zip salvato precedentemente (senza .zip)
     # Ad esempio: "ppo_blade_start_profile_DOFPITCH_DOFBETA1_lr3e-05_nsteps200"
-    modello_salvato = "ppo_blade_start_profile_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_riga[3]"
+    modello_salvato = "ppo_blade_start_profile_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_rigaNone"
 
     print(f"\nProfilo da ottimizzare (riga {riga_nuova_idx}):")
     print(nuovo_profilo)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     best_dof_inf, best_of_inf, best_csi_inf = ottimizza_con_modello_esistente(
         percorso_modello=modello_salvato,
         nuovo_profilo=nuovo_profilo,
-        ep_length=20
+        ep_length=40
     )
 
     print(f"Best DOF: {best_dof_inf}")

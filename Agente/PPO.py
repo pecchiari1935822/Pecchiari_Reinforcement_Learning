@@ -34,14 +34,18 @@ class BladeCallback(BaseCallback):
       - DOF e OF del miglior risultato trovato in tutto il training
     """
 
-    def __init__(self, verbose=0):
+    def __init__(self, verbose=0, start_dof=None, episode_length=None):
         super().__init__(verbose)
         self.ep_rewards = []
         self.ep_lengths = []
         self.timesteps = []
+        self.start_dof = start_dof
 
         # Early stopping
-        self.patience = 4000  # numero di step senza miglioramento prima di fermare
+        if episode_length == 20:
+            self.patience = 4000  # numero di step senza miglioramento prima di fermare
+        if episode_length == 40:
+                self.patience = 12000
         self.steps_senza_miglioramenti = 0
 
         # Metriche episodio
@@ -135,9 +139,10 @@ class BladeCallback(BaseCallback):
                 self.best_dof_ep = None
 
 
-        if self.steps_senza_miglioramenti >= self.patience:
-                print(f"\n[Early Stopping] Nessun miglioramento del CSI per {self.patience} step. Interruzione.")
-                return False  # Questo ferma il PPO!
+        '''if self.start_dof is not None:
+            if self.steps_senza_miglioramenti >= self.patience:
+                    print(f"\n[Early Stopping] Nessun miglioramento del CSI per {self.patience} step. Interruzione.")
+                    return False  # Questo ferma il PPO!'''
 
         return True
 
@@ -186,7 +191,7 @@ class BladeCallback(BaseCallback):
 def train(surrogate_path=SURROGATE_MODEL_PATH,
           scaler_path=SCALER_PATH,
           start_dof=None,
-          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None):
+          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta = True, episode_length=None):
     print("=" * 60)
     print("  PPO Blade Optimization — Stable Baselines3")
     print(f"  DOF attivi: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}")
@@ -198,7 +203,7 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
 
     # check_env PRIMA di Monitor (evita bug NoneType)
     print("\n  Verifica ambiente...")
-    env_raw = BladeOptimEnv(surrogate, start_dof=start_dof)
+    env_raw = BladeOptimEnv(surrogate, start_dof=start_dof, use_delta =use_delta, episode_length= episode_length)
     check_env(env_raw, warn=True)
     print("  Ambiente OK.\n")
 
@@ -231,7 +236,7 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
 
     env = Monitor(env_raw, filename="./ppo_blade_monitor")
 
-    cb_blade = BladeCallback(verbose=0)
+    cb_blade = BladeCallback(verbose=0, start_dof=start_dof)
     cb_ckpt = CheckpointCallback(
         save_freq=10000, save_path="./ppo_blade_checkpoints/",
         name_prefix="ppo_blade", verbose=1,
@@ -256,7 +261,7 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
         active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
         safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
         active_tag = "_".join(safe_names) if safe_names else "ALL"
-        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
+        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}_senza_delta"
         model_path = model_basename  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
@@ -419,12 +424,8 @@ def _plot_dof_evolution(cb: BladeCallback, lr, n_step, start_dof = None, save_pa
     colori_per_episodio = np.random.uniform(0.1,0.75,size=(n_episodes, 3))
 
     # Creiamo una griglia 4x2 standard (senza sharex)
-    fig, axes = plt.subplots(4, 2, figsize=(15, 12))
-    fig.suptitle(
-        f"Evoluzione dei DOF (Miglior profilo per Episodio)\n"
-        f"Total steps={TOTAL_TIMESTEPS:,}  n_steps={n_step}  Learning_Rate={lr}",
-        fontsize=16
-    )
+    fig, axes = plt.subplots(4, 2, figsize=(16, 8.5))
+
     axes_flat = axes.flatten()
 
     for i in range(7):
@@ -509,12 +510,8 @@ def _plot_dof_evolution_barre(cb: BladeCallback, lr, n_step,start_dof = None, sa
     colori_per_episodio = np.random.uniform(0.1,0.75,size=(n_episodes, 3))
 
     # Creiamo una griglia 4x2 standard
-    fig, axes = plt.subplots(4, 2, figsize=(15, 12))
-    fig.suptitle(
-        f"Evoluzione dei DOF (Miglior profilo per Episodio)\n"
-        f"Total steps={TOTAL_TIMESTEPS:,}  n_steps={n_step}  Learning_Rate={lr}",
-        fontsize=16
-    )
+    fig, axes = plt.subplots(4, 2, figsize=(16, 8.5))
+
     axes_flat = axes.flatten()
 
     for i in range(7):
@@ -691,7 +688,7 @@ def _plot_training_metrics_critic(cb: BladeCallback,lr , n_step, save_path="plot
         if not valori:
             ax.text(0.5, 0.5, "Nessun dato", ha="center", va="center",
                     transform=ax.transAxes, color="gray")
-            ax.set_title(titolo, fontsize=12)
+            ax.set_title(titolo, fontsize=15)
             continue
 
         if chiave == "entropy_loss":
@@ -723,7 +720,7 @@ def _plot_training_metrics_critic(cb: BladeCallback,lr , n_step, save_path="plot
         )
 
         ax.set_xlabel("Episodio", fontsize=10)
-        ax.set_title(titolo, fontsize=11, fontweight="bold")
+        ax.set_title(titolo, fontsize=13, fontweight="bold")
         ax.legend(fontsize=10)
         ax.grid(alpha=0.25)
         ax.tick_params(labelsize=11)
@@ -839,11 +836,18 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
 
         # Inserisci immagine centrata (adattata per 16:9)
         # Una slide 16:9 tipica è larga 13.33 pollici e alta 7.5 pollici
-        left = Inches(1)
-        top = Inches(1.5)
-        width = Inches(11.33)  # Lascia 1 pollice di margine per lato
+        if idx == 0 or idx == 4:
+            left = Inches(1)
+            top = Inches(1.5)
+            width = Inches(11.33)  # Lascia 1 pollice di margine per lato
+            slide_img.shapes.add_picture(str(img_path), left, top, width=width)
+        else:
+            left = Inches(1)
+            top = Inches(1.1)
+            heigh = Inches(5.9)  # Lascia 1 pollice di margine per lato
+            slide_img.shapes.add_picture(str(img_path), left, top, height=heigh)
 
-        slide_img.shapes.add_picture(str(img_path), left, top, width=width)
+
 
     slide_layout_best = prs.slide_layouts[5]
     slide_best = prs.slides.add_slide(slide_layout_best)
@@ -868,7 +872,10 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
 
             # Se il DOF era attivo, mostra anche il valore di partenza
             if i in ACTIVE_DOF_INDICES:
-                p_dof.text = f"{nome} (*) = {val:.6f} da {start_dof[i]:.6f}"
+                if start_dof is not None:
+                    p_dof.text = f"{nome} (*) = {val:.6f} da {start_dof[i]:.6f}"
+                else:
+                    p_dof.text = f"{nome} (*) = {val:.6f}"
             else:
                 p_dof.text = f"{nome} = {val:.6f}"
             p_dof.level = 0
@@ -888,11 +895,15 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
 
             # Poiché gli OF sono output, tecnicamente cambiano tutti.
             # Verifichiamo se c'è stata una variazione significativa.
-            if abs(val - start_of[i]) > 1e-6:
-                p_of.text = f"{nome} = {val:.6f} da {start_of[i]:.6f}"
+            if start_of is not None:
+                if abs(val - start_of[i]) > 1e-6:
+                    p_of.text = f"{nome} = {val:.6f} da {start_of[i]:.6f}"
+                else:
+                    p_of.text = f"{nome} = {val:.6f}"
+                p_of.level = 0
             else:
                 p_of.text = f"{nome} = {val:.6f}"
-            p_of.level = 0
+                p_of.level = 0
 
 
 def pulisci_file_temporanei():
