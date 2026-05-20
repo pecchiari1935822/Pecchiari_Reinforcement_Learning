@@ -103,7 +103,11 @@ class BladeCallback(BaseCallback):
             csi_step = info.get("csi", None)
             dof_step = info.get("dof_full", None)
             of_step = info.get("of", None)
-            if csi_step is not None:
+            is_valid = info.get("is_valid", True)  # <--- Leggiamo se il profilo ha superato i vincoli
+
+            # Entriamo nell'aggiornamento del "Migliore" SOLO SE il profilo è valido (entro il 3%)
+            if csi_step is not None and is_valid:
+
                 if csi_step < self.best_csi_ep:
                     self.best_csi_ep = csi_step
                     self.best_dof_ep = dof_step.copy() if dof_step is not None else None
@@ -114,14 +118,20 @@ class BladeCallback(BaseCallback):
                     self.best_of = of_step.copy() if of_step is not None else None
                     self.steps_senza_miglioramenti = 0
                     self.logger.record("custom/best_CSI", self.best_csi)
+
             self._current_score += reward
 
 
 
             if done:
-                self.episode_csi.append(self.best_csi_ep)  # Ora salvi il meglio episodio!
+                if self.best_dof_ep is None:
+                    self.best_dof_ep = np.full(7, np.nan)
+                    # ---------------------------------------------------
+
+                self.episode_csi.append(self.best_csi_ep)
                 self.episode_scores.append(self._current_score)
                 self.episode_best_dofs.append(self.best_dof_ep)
+
                 self._current_score = 0.0
                 self.n_episodes += 1
 
@@ -131,6 +141,8 @@ class BladeCallback(BaseCallback):
                 if self.best_csi_ep < self.best_csi:
                     self.best_csi = self.best_csi_ep
                     self.steps_senza_miglioramenti = 0
+                    # Qui non c'è bisogno del copy() perché in questo if ci entriamo
+                    # solo se csi_step è stato aggiornato con dati validi
                     self.best_dof = info.get("dof_full", None)
                     self.best_of = info.get("of", None)
                     self.logger.record("custom/best_CSI", self.best_csi)
@@ -198,6 +210,8 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
     print(f"  Reward: minimizza CSI (OF_CSI_OP_01)")
     print("=" * 60)
 
+    print("\n use delta:", use_delta)
+
     surrogate = load_surrogate(surrogate_path, scaler_path)
     assert callable(surrogate), "load_surrogate ha restituito None"
 
@@ -261,7 +275,10 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
         active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
         safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
         active_tag = "_".join(safe_names) if safe_names else "ALL"
-        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}_senza_delta"
+        if use_delta == True:
+            model_basename = f"ppo_task1_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_con_delta"
+        else:
+            model_basename = f"ppo_task1_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_senza_delta"
         model_path = model_basename  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
@@ -283,7 +300,10 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
         active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
         safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
         active_tag = "_".join(safe_names) if safe_names else "ALL"
-        model_basename = f"ppo_blade_start_profile_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
+        if use_delta == True:
+            model_basename = f"ppo_task2_use_delta_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
+        else:
+            model_basename = f"ppo_task2_no_use_delta_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
         model_path = model_basename  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
@@ -824,7 +844,7 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
     except:
         slide_layout_img = prs.slide_layouts[1]  # Fallback
 
-    titoli_immagini = ["Risultati","Andamento Miglior DOF per episodio", "Andamento Miglior DOF per episodio", "Metriche Attore", "Metriche Critico"]  # Layout Solo Titolo o Vuota
+    titoli_immagini = ["Risultati","Andamento Valore Miglior DOF per episodio", "Andamento Valore Miglior DOF per episodio", "Metriche Attore", "Metriche Critico"]  # Layout Solo Titolo o Vuota
     for idx, img_path in enumerate(img_paths):
         if not os.path.exists(img_path):
             continue

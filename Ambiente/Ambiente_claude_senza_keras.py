@@ -60,11 +60,12 @@ OF_NAMES = [
 
 # Indice CSI — usato nella reward attuale
 IDX_CSI = OF_NAMES.index("OF_CSI")
+IDX_PSI = OF_NAMES.index("OF_psi")
+IDX_PHI = OF_NAMES.index("OF_phi")
 
 # Indici commentati — da attivare quando aggiungi compute_efficiency
-"""IDX_CPT = OF_NAMES.index("OF_Cpt")
-IDX_PSI = OF_NAMES.index("OF_psi")
-IDX_PHI = OF_NAMES.index("OF_phi")"""
+"""IDX_CPT = OF_NAMES.index("OF_Cpt")"""
+IDX_PHI = OF_NAMES.index("OF_phi")
 
 # ============================================================
 # CARICAMENTO SURROGATE KERAS
@@ -179,7 +180,7 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH,
 # FUNZIONE DI REWARD
 # ============================================================
 
-def compute_reward(of_current, of_previous):
+def compute_reward(of_current, of_previous, of_start, tolleranza=None):
     """
     La reward è POSITIVA quando CSI diminuisce (meno perdite).
     La reward è NEGATIVA quando CSI aumenta (più perdite).
@@ -191,11 +192,44 @@ def compute_reward(of_current, of_previous):
     if np.isnan(of_current).any() or np.isinf(of_current).any():
         return -10.0   # surrogate fuori distribuzione
 
+    # Variabili per ottimizzare solamente le perdite CSI
     csi_curr = of_current[IDX_CSI]
     csi_prev = of_previous[IDX_CSI]
 
-    # Invertito: reward positiva se CSI scende
-    return float(csi_prev - csi_curr)
+    psi_curr = of_current[IDX_PSI]
+    psi_prev = of_previous[IDX_PSI]
+
+
+    # Variabili per ottimizzare l'efficienza
+    eta_curr = psi_curr / (1+csi_curr)
+    eta_prev = psi_prev / (1+csi_prev)
+
+    # Variabili per la penalizzazione se phi o psi cambiano più di un tot %
+    psi_start = of_start[IDX_PSI]
+    phi_start = of_start[IDX_PHI]
+    phi_curr = of_current[IDX_PHI]
+
+    errore_psi = abs(psi_curr - psi_start) / abs((psi_start) + 1e-8)
+
+
+    errore_phi = abs(phi_curr - phi_start) / abs((phi_start) + 1e-8)
+
+    penalty = 0.0
+    if errore_psi > tolleranza:
+        # Moltiplicatore da calibrare (es. 10.0) in modo che la penalità
+        # superi il guadagno del delta CSI
+        penalty += 10.0 * (errore_psi - tolleranza)
+
+    if errore_phi > tolleranza:
+        penalty += 10.0 * (errore_phi - tolleranza)
+
+    reward_csi = float(csi_prev - csi_curr)
+
+    # Rcompensa per l'ottimizzazione dell'efficienza
+    # return float (eta_curr - eta_prev)
+
+    # Ricompensa per l'ottimizzazione delle perdite con la penalità
+    return reward_csi - penalty
 
 
 # ============================================================
@@ -214,7 +248,7 @@ class BladeOptimEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
     def __init__(self, surrogate_fn, start_dof=None,
-                 action_scale=ACTION_SCALE, use_delta=None, episode_length=None):
+                 action_scale=ACTION_SCALE, use_delta=False, episode_length=None):
         super().__init__()
 
         self.use_delta = use_delta
@@ -249,7 +283,7 @@ class BladeOptimEnv(gym.Env):
         # DOF attivi normalizzati [0,1] + tutti i 15 OF
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
-            shape=(n_active_dof + n_of,),
+            shape=(n_active_dof + n_of+2,),
             dtype=np.float32
         )
 
@@ -257,6 +291,7 @@ class BladeOptimEnv(gym.Env):
         self.current_dof_active = None   # solo i DOF che l'agente modifica
         self.current_dof_full   = None   # tutti e 7 i DOF (per la surrogate)
         self.current_of         = None
+        self.start_of           = None
         self.step_count         = 0
 
     def _build_obs(self, dof_active, of_vals):
@@ -265,7 +300,16 @@ class BladeOptimEnv(gym.Env):
         La normalizzazione aiuta la rete PPO a lavorare su scale comparabili.
         """
         dof_norm = (dof_active - self.dof_low) / (self.dof_range + 1e-8)
-        return np.concatenate([dof_norm, of_vals]).astype(np.float32)
+        if self.start_of is not None:
+            target_psi = self.start_of[IDX_PSI]
+            target_phi = self.start_of[IDX_PHI]
+        else:
+            target_psi = 0.0
+            target_phi = 0.0
+
+        target_array = np.array([target_psi, target_phi], dtype=np.float32)
+
+        return np.concatenate([dof_norm, of_vals, target_array]).astype(np.float32)
 
     def _get_observation(self):
         # Estrai solo i DOF attivi dal vettore completo
@@ -289,6 +333,7 @@ class BladeOptimEnv(gym.Env):
             ).astype(np.float32)
 
         self.current_of = self.predict(self.current_dof_full)
+        self.start_of = self.current_of.copy()
         self.step_count = 0
 
         obs = self._get_observation()
@@ -312,6 +357,7 @@ class BladeOptimEnv(gym.Env):
             delta = action * self.action_scale * self.dof_range
 
 
+
             # Aggiorna i DOF attivi nel vettore completo (7 DOF)
             new_dof_full = self.current_dof_full.copy()
             new_dof_active = self.current_dof_active + delta
@@ -319,6 +365,7 @@ class BladeOptimEnv(gym.Env):
 
         else:
             new_dof_active = self.dof_low + (action + 1.0) / 2.0 * self.dof_range
+
 
             # Aggiorna il profilo completo
             new_dof_full = self.current_dof_full.copy()
@@ -333,23 +380,36 @@ class BladeOptimEnv(gym.Env):
         new_of = self.predict(new_dof_full).astype(np.float32)
 
         # Reward semplificata: minimizza CSI
-        reward = compute_reward(new_of, prev_of)
+        tolleranza_max = 0.03
+        reward_val = compute_reward(new_of, prev_of, self.start_of, tolleranza=tolleranza_max)
+        reward = float(np.squeeze(reward_val))
+
+        # --- AGGIUNTA: Calcolo se il profilo rispetta i vincoli per dirlo alla Callback ---
+        errore_psi = abs(new_of[IDX_PSI] - self.start_of[IDX_PSI]) / (abs(self.start_of[IDX_PSI]) + 1e-8)
+        errore_phi = abs(new_of[IDX_PHI] - self.start_of[IDX_PHI]) / (abs(self.start_of[IDX_PHI]) + 1e-8)
+
+        # True se ENTRAMBI gli errori sono sotto il 3%
+        is_valid = bool(errore_psi <= tolleranza_max and errore_phi <= tolleranza_max)
 
         # Aggiorna stato interno
         self.current_dof_active = new_dof_active
-        self.current_dof_full   = new_dof_full
-        self.current_of         = new_of
+        self.current_dof_full = new_dof_full
+        self.current_of = new_of
 
         terminated = False
-        truncated  = self.step_count >= self.ep_length
+        truncated = self.step_count >= self.ep_length
 
-        obs  = self._build_obs(self.current_dof_active, self.current_of)
+        obs = self._build_obs(self.current_dof_active, self.current_of)
+
+        # Aggiungiamo 'is_valid' al dizionario info
         info = {
-            "efficiency" : None,       # da attivare con compute_efficiency()
-            "csi"        : float(new_of[IDX_CSI]),
-            "dof_active" : self.current_dof_active.copy(),
-            "dof_full"   : self.current_dof_full.copy(),
-            "of"         : self.current_of.copy(),
+            "efficiency": None,
+            "csi": float(new_of[IDX_CSI]),
+            "psi": float(new_of[IDX_PSI]),
+            "dof_active": self.current_dof_active.copy(),
+            "dof_full": self.current_dof_full.copy(),
+            "of": self.current_of.copy(),
+            "is_valid": is_valid  # <--- AGGIUNTO QUI
         }
 
         return obs, reward, terminated, truncated, info

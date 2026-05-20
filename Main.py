@@ -8,9 +8,9 @@ from Agente.PPO import DOF_BOUNDS_ALL, DOF_NAMES_ALL, PPO_PARAMS, SURROGATE_MODE
 # ==========================================
 # TASK 1: Partenza casuale
 # ==========================================
-def task_1():
+def task_1(use_delta):
 
-    use_delta = None
+    use_delta = use_delta
     episode_length = 60
 
     prs = Presentation()
@@ -135,7 +135,10 @@ def task_1():
 
 
     # Salva presentazione
-    output_pptx = "Report_Task1_Casuale_senza_delta.pptx"
+    if use_delta == True:
+        output_pptx = "Task1_delta.pptx"
+    else:
+        output_pptx = "Task1_mapping completo.pptx"
     prs.save(output_pptx)
 
     # Salva risultati in CSV
@@ -161,9 +164,13 @@ def task_1():
 # ==========================================
 # TASK 2: Ottimizzazione da riga del Dataset
 # ==========================================
-def task_2():
+def task_2(use_delta):
 
-    use_delta = True
+    use_delta = use_delta
+    if use_delta == True:
+        print("\n⚠️  Modalità DELTA attiva: il PPO ottimizzerà la differenza rispetto al CSI originale.")
+    else:
+        print ("\n⚠️  Modalità mapping completo: il PPO ottimizzerà direttamente il CSI senza considerare il delta.")
     episode_length = 20
 
     prs = Presentation()
@@ -336,11 +343,16 @@ def task_2():
 
                     aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_profile, start_of_originali)
 
-    output_pptx = "Report_Simulazioni_PPO.pptx"
+    if use_delta == True:
+        output_pptx = "Task2_delta.pptx"
+    else:
+        output_pptx = "Task2_mapping completo.pptx"
     prs.save(output_pptx)
 
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    task_1()
-    #task_2()
+    task_1(True)
+    task_1(False)
+    task_2(True)
+    task_2(False)
