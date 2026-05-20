@@ -4,9 +4,9 @@ import gymnasium as gym
 from gymnasium import spaces
 from pathlib import Path
 import pandas as pd
-from Agente.Set_input_param import ACTIVE_DOF_INDICES, ACTION_SCALE
-
-
+from Agente.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, DOF_NAMES_ALL, OF_NAMES, TARGET_CSI,
+                                    TARGET_PHI, TARGET_PSI
+                                    )
 # ============================================================
 # CONFIGURAZIONE
 # ============================================================
@@ -23,16 +23,6 @@ print(f"DEBUG: File esiste? {os.path.exists(SURROGATE_MODEL_PATH)}")
 print(f"DEBUG: SCALER_PATH = {SCALER_PATH}")
 print(f"DEBUG: File esiste? {os.path.exists(SCALER_PATH)}")
 
-# Range fisici dei 7 DOF — valori reali del dataset
-DOF_BOUNDS_ALL = [
-    (0.084,   0.140),    # DOF_PITCH_GEOM
-    (0.034,  19.966),    # DOF_BETA1_GEOM
-    (-69.996, -60.121),  # DOF_BETA2_GEOM_
-    (0.0,     0.745),    # DOF_W1_GEOM
-    (0.001,   0.999),    # DOF_W2_GEOM
-    (-0.149,  0.199),    # DOF_TMOVXU_GEOM_
-    (-0.150,  0.200),    # DOF_TMOVXL_GEOM_
-]
 
 # -------------------------------------------------------
 # SELEZIONE DOF ATTIVI
@@ -45,27 +35,15 @@ DOF_BOUNDS_ALL = [
 # Applica la selezione
 DOF_BOUNDS = [DOF_BOUNDS_ALL[i] for i in ACTIVE_DOF_INDICES]
 
-# Nomi colonne DOF e OF
-DOF_NAMES_ALL = [
-    "DOF_PITCH", "DOF_BETA1", "DOF_BETA2",
-    "DOF_W1", "DOF_W2", "DOF_TMOVXU", "DOF_TMOVXL"
-]
-OF_NAMES = [
-    "OF_alfa_ex", "OF_Cpt",      "OF_CSI",
-    "OF_phi",     "OF_psi",      "OF_Zwi",
-    "OF_Zwc",     "OF_DFss_mis", "OF_DFss_cp",
-    "OF_Mis_peak","OF_s_peak",   "OF_s_diff_dim",
-    "OF_s_tot_SS","OF_Tmax",     "OF_X_Tmax"
-]
 
 # Indice CSI — usato nella reward attuale
-IDX_CSI = OF_NAMES.index("OF_CSI")
-IDX_PSI = OF_NAMES.index("OF_psi")
-IDX_PHI = OF_NAMES.index("OF_phi")
+IDX_CSI = OF_NAMES.index(TARGET_CSI)
+IDX_PSI = OF_NAMES.index(TARGET_PSI)
+IDX_PHI = OF_NAMES.index(TARGET_PHI)
 
 # Indici commentati — da attivare quando aggiungi compute_efficiency
 """IDX_CPT = OF_NAMES.index("OF_Cpt")"""
-IDX_PHI = OF_NAMES.index("OF_phi")
+
 
 # ============================================================
 # CARICAMENTO SURROGATE KERAS

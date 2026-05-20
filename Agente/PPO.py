@@ -18,7 +18,7 @@ from Ambiente.Ambiente_claude_senza_keras import (
     SURROGATE_MODEL_PATH, SCALER_PATH,
     DOF_NAMES_ALL, OF_NAMES, ACTIVE_DOF_INDICES,
     load_surrogate, BladeOptimEnv, DOF_BOUNDS_ALL)
-from Agente.Set_input_param import combinazioni_da_testare, learning_rate, n_steps, ROW_INDEX, PPO_PARAMS, TOTAL_TIMESTEPS
+from Agente.Set_input_param import combinazioni_da_testare, learning_rate, n_steps, ROW_INDEX, PPO_PARAMS, TOTAL_TIMESTEPS, n_dof_totali
 
 
 
@@ -125,7 +125,7 @@ class BladeCallback(BaseCallback):
 
             if done:
                 if self.best_dof_ep is None:
-                    self.best_dof_ep = np.full(7, np.nan)
+                    self.best_dof_ep = np.full(n_dof_totali, np.nan)
                     # ---------------------------------------------------
 
                 self.episode_csi.append(self.best_csi_ep)
@@ -429,6 +429,8 @@ def _plot_dof_evolution(cb: BladeCallback, lr, n_step, start_dof = None, save_pa
     in ogni episodio per tutta la durata dell'addestramento, colorando i punti in
     base al numero dell'episodio.
     """
+
+
     if not cb.episode_best_dofs:
         print("  Nessun dato dei DOF da plottare.")
         return
@@ -448,7 +450,7 @@ def _plot_dof_evolution(cb: BladeCallback, lr, n_step, start_dof = None, save_pa
 
     axes_flat = axes.flatten()
 
-    for i in range(7):
+    for i in range(n_dof_totali):
         ax = axes_flat[i]
         y_vals = dof_data[:, i]
 
@@ -500,7 +502,7 @@ def _plot_dof_evolution(cb: BladeCallback, lr, n_step, start_dof = None, save_pa
             ax.legend(fontsize=8, loc='best')
 
     # Nascondi l'ottavo grafico vuoto
-    axes_flat[7].set_visible(False)
+    axes_flat[n_dof_totali].set_visible(False)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig(save_path, bbox_inches='tight', dpi=150)
@@ -534,7 +536,7 @@ def _plot_dof_evolution_barre(cb: BladeCallback, lr, n_step,start_dof = None, sa
 
     axes_flat = axes.flatten()
 
-    for i in range(7):
+    for i in range(n_dof_totali):
         ax = axes_flat[i]
         y_vals = dof_data[:, i]
 
@@ -591,7 +593,7 @@ def _plot_dof_evolution_barre(cb: BladeCallback, lr, n_step,start_dof = None, sa
             ax.legend(fontsize=8, loc='best')
 
     # Nascondi l'ottavo grafico vuoto
-    axes_flat[7].set_visible(False)
+    axes_flat[n_dof_totali].set_visible(False)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.savefig(save_path, bbox_inches='tight', dpi=150)

@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-from Agente.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES
+from Agente.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, OF_NAMES, TARGET_CSI
 from Agente.PPO import DOF_BOUNDS_ALL, DOF_NAMES_ALL, PPO_PARAMS, SURROGATE_MODEL_PATH, SCALER_PATH, aggiungi_slide_iterazione, train, pulisci_file_temporanei, Presentation, Path
 
 
@@ -195,7 +195,7 @@ def task_2(use_delta):
         riga = df.iloc[row_idx].values
 
         # 3. Estrai il CSI originale (12° valore -> indice 11)
-        csi_originale = float(riga[11])
+        csi_originale = float(row[TARGET_CSI])
 
         for active_dof in combinazioni_da_testare:
             # ---> FIX CRITICO: Aggiorniamo dinamicamente le variabili dell'ambiente!
@@ -247,7 +247,7 @@ def task_2(use_delta):
             print(f"Estrazione riga numero: {row_idx}")
 
             # 2. Estrai i 7 DOF (dal 3° al 9° valore -> indici da 2 a 8)
-            start_profile = riga[2:9].astype(np.float32).copy()
+            start_profile = row[DOF_NAMES_ALL].values.astype(np.float32).copy()
 
             # Perturbazione del dof attivo (che si vuole ottimizzare)
             '''for idx in active_dof:
@@ -339,7 +339,7 @@ def task_2(use_delta):
                     # 3. Aggiungi i risultati alla presentazione
                     img_paths = [path_img1, path_img2, path_img3, path_img4, path_img5]
 
-                    start_of_originali = riga[9:24].astype(np.float32)
+                    start_of_originali = row[OF_NAMES].values.astype(np.float32)
 
                     aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_profile, start_of_originali)
 

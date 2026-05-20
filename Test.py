@@ -80,20 +80,22 @@ if __name__ == "__main__":
     df = pd.read_csv(DATASET_PATH)
     riga_nuova_idx = 3
     riga_nuova = df.iloc[riga_nuova_idx].values
-    nuovo_profilo = riga_nuova[2:9].astype(np.float32).copy()
+    DOF_profilo = riga_nuova[2:9].astype(np.float32).copy()
+    OF_profilo = riga_nuova[9:24].astype(np.float32).copy()
     csi_nuovo_originale = float(riga_nuova[11])
 
     #modello_salvato = "ppo_task2_use_delta_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_riga[710]"
     modello_salvato = "ppo_task1_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_con_delta"
 
     print(f"\nProfilo da ottimizzare (riga {riga_nuova_idx}):")
-    print(nuovo_profilo)
-    print(f"CSI di partenza: {csi_nuovo_originale:.6f}")
+    print(f"\nDOF {DOF_profilo}")
+    print(f"\nOF {OF_profilo}")
+    print(f"\nCSI di partenza: {csi_nuovo_originale:.6f}")
 
     # ===== MODIFICATO: Traccia i CSI per ogni step =====
     model = PPO.load(modello_salvato)
     surrogate = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
-    env = BladeOptimEnv(surrogate, start_dof=nuovo_profilo, episode_length=40)
+    env = BladeOptimEnv(surrogate, start_dof=DOF_profilo, episode_length=40)
 
     obs, info = env.reset()
     best_csi = np.inf
@@ -122,6 +124,7 @@ if __name__ == "__main__":
     print(f"\n  Modello: {modello_salvato}")
 
     print(f"\n DOF ottimizzati: {best_dof}")
+    print(f"\n OF ottimizzati: {best_of}")
 
 
     miglioramento = csi_nuovo_originale - best_csi

@@ -21,6 +21,37 @@ PPO_PARAMS = dict(
 # Cosa si vuole ottimizzare (quali DOF) e in quale riga del file di input
 ROW_INDEX = [710]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
 
+DOF_BOUNDS_ALL = [
+    (0.084,   0.140),    # DOF_PITCH_GEOM
+    (0.034,  19.966),    # DOF_BETA1_GEOM
+    (-69.996, -60.121),  # DOF_BETA2_GEOM_
+    (0.0,     0.745),    # DOF_W1_GEOM
+    (0.001,   0.999),    # DOF_W2_GEOM
+    (-0.149,  0.199),    # DOF_TMOVXU_GEOM_
+    (-0.150,  0.200),    # DOF_TMOVXL_GEOM_
+]
+
+DOF_NAMES_ALL = [
+    "DOF_PITCH", "DOF_BETA1", "DOF_BETA2",
+    "DOF_W1", "DOF_W2", "DOF_TMOVXU", "DOF_TMOVXL"
+]
+
+OF_NAMES = [
+    "OF_alfa_ex", "OF_Cpt",      "OF_CSI",
+    "OF_phi",     "OF_psi",      "OF_Zwi",
+    "OF_Zwc",     "OF_DFss_mis", "OF_DFss_cp",
+    "OF_Mis_peak","OF_s_peak",   "OF_s_diff_dim",
+    "OF_s_tot_SS","OF_Tmax",     "OF_X_Tmax"
+]
+
+n_dof_totali = len(DOF_NAMES_ALL)
+n_of_totali = len(OF_NAMES)
+
+# Colonne target usate nella funzione di reward e nei controlli
+TARGET_CSI = "OF_CSI"
+TARGET_PSI = "OF_psi"
+TARGET_PHI = "OF_phi"
+
 ACTIVE_DOF_INDICES = [0,1,2,3,4,5,6]  # INSERISCI GLI INDICI DEI DOF CHE VUOI OTTIMIZZARE (0-5)
 
 COPPIE_CUSTOM = [[1, 3], [2, 4], [5, 6]]
