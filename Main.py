@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from Agente.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, OF_NAMES, TARGET_CSI
 from Agente.PPO import DOF_BOUNDS_ALL, DOF_NAMES_ALL, PPO_PARAMS, SURROGATE_MODEL_PATH, SCALER_PATH, aggiungi_slide_iterazione, train, pulisci_file_temporanei, Presentation, Path
-
+from Ambiente.Ambiente_claude_senza_keras import load_surrogate
 
 # ==========================================
 # TASK 1: Partenza casuale
@@ -58,6 +58,8 @@ def task_1(use_delta):
             else:
                 p.text = f"{key} = {value}"
 
+    surrogate_fn = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
+
     # Loop su learning_rate e n_steps
     for lr in learning_rate:
         for n_step in n_steps:
@@ -75,8 +77,7 @@ def task_1(use_delta):
 
             # Esegui training
             model, best_dof, best_of, best_csi, model_path = train(
-                surrogate_path=SURROGATE_MODEL_PATH,
-                scaler_path=SCALER_PATH,
+                surrogate_fn=surrogate_fn,
                 start_dof=None,  # ← CASUALE
                 learning_rate=lr,
                 n_steps=n_step,
@@ -184,13 +185,13 @@ def task_2(use_delta):
         print(f"Caricamento template da: {TEMPLATE_PATH}")
         prs = Presentation(TEMPLATE_PATH)
 
-
+    df = pd.read_csv(DATASET_PATH)
     for row_idx in ROW_INDEX:
         print(f"\nLettura dataset: {DATASET_PATH}")
         print(f"Estrazione riga numero: {row_idx}")
 
-        # Leggi il dataset ed estrai la riga
-        df = pd.read_csv(DATASET_PATH)
+        # Estrai la riga dal dataset
+
         row = df.iloc[row_idx]
         riga = df.iloc[row_idx].values
 
@@ -282,6 +283,8 @@ def task_2(use_delta):
 
             print(f"\nProfilo di partenza per il PPO: {start_profile}.3f")
 
+            surrogate_fn = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
+
             # Testo l'addestramento di ogni profilo (riga) con diversi learning_rate per vedere quale è meglio
             for lr in learning_rate:
 
@@ -297,8 +300,7 @@ def task_2(use_delta):
                     # 5. Avvia il Training (Task 2)
                     print(f"\n  Learning_rate attuale : {lr}\n")
                     model, best_dof, best_of, best_csi, model_ = train(
-                        surrogate_path=SURROGATE_MODEL_PATH,
-                        scaler_path=SCALER_PATH,
+                        surrogate_fn=surrogate_fn,
                         start_dof=start_profile,
                         learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX, use_delta =use_delta, episode_length=episode_length
                     )
@@ -331,7 +333,7 @@ def task_2(use_delta):
                         "Episode Length": episode_length,
                         "Batch size": batch_size,
                         "CSI Originale": round(csi_originale, 6),
-                        "DOF attivi modificati": [f"{DOF_NAMES_ALL[i]} da {riga[i+2]} a {start_profile[i]:.3f}" for i in active_dof],
+                        "DOF attivi modificati": [f"{DOF_NAMES_ALL[i]} da {row[DOF_NAMES_ALL[i]]} a {start_profile[i]:.3f}" for i in active_dof],
                         "CSI profilo modificato": None
                     }
 

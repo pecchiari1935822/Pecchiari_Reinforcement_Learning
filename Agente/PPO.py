@@ -200,8 +200,7 @@ class BladeCallback(BaseCallback):
 # TRAINING
 # ============================================================
 
-def train(surrogate_path=SURROGATE_MODEL_PATH,
-          scaler_path=SCALER_PATH,
+def train(surrogate_fn,
           start_dof=None,
           learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta = True, episode_length=None):
     print("=" * 60)
@@ -209,11 +208,6 @@ def train(surrogate_path=SURROGATE_MODEL_PATH,
     print(f"  DOF attivi: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}")
     print(f"  Reward: minimizza CSI (OF_CSI_OP_01)")
     print("=" * 60)
-
-    print("\n use delta:", use_delta)
-
-    surrogate = load_surrogate(surrogate_path, scaler_path)
-    assert callable(surrogate), "load_surrogate ha restituito None"
 
     # check_env PRIMA di Monitor (evita bug NoneType)
     print("\n  Verifica ambiente...")

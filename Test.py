@@ -63,7 +63,6 @@ def plot_inferenza_results(steps_csi, best_csi, csi_originale, ep_length, modell
     plt.show()
 
 
-# MODIFICA il tuo codice main così:
 
 if __name__ == "__main__":
     from stable_baselines3 import PPO
