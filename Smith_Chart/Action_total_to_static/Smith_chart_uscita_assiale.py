@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from pathlib import Path
 
+from Smith_Chart.Action_total_to_total.Smith_chart_total_to_total import SmithDiagram_Action_total_to_total
 
-class SmithDiagram_Reaction_Assiale:
+
+class SmithDiagram_Action_Assiale:
     """
     Carica i file CSV da WebPlotDigitizer e costruisce il diagramma di Smith.
     """
@@ -246,7 +248,7 @@ class SmithDiagram_Reaction_Assiale:
         # ===== Formattazione =====
         ax.set_xlabel('Flow coefficient, φ', fontsize=15, fontweight='bold')
         ax.set_ylabel('Stage loading coefficient, ψ', fontsize=15, fontweight='bold')
-        ax.set_title('Smith Diagram Reaction - uscita assiale', fontsize=15, fontweight='bold')
+        ax.set_title('Smith Diagram Action - uscita assiale', fontsize=15, fontweight='bold')
         ax.legend(loc='upper left', title='Deflection angle', fontsize=13)
         ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', which='major', labelsize=15)
@@ -261,7 +263,7 @@ class SmithDiagram_Reaction_Assiale:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"✓ Grafico salvato: {save_path}")
 
-        plt.show()
+
         return fig, ax
 
     def print_summary(self):
@@ -285,20 +287,19 @@ class SmithDiagram_Reaction_Assiale:
 
 # ===== ESEMPIO DI USO =====
 
-if __name__ == "__main__":
-    # 1. Specifica il percorso della cartella con i CSV
-    csv_folder = Path(__file__).parent / "csv"  # ← Percorso aggiornato
+# 1. Specifica il percorso della cartella con i CSV
+csv_folder = Path(__file__).parent / "csv"  # ← Percorso aggiornato
 
-    # 2. Carica il diagramma
-    smith_reaction_assiale = SmithDiagram_Reaction_Assiale(csv_folder)
+# 2. Carica il diagramma
+smith_action_assiale = SmithDiagram_Action_Assiale(csv_folder)
 
-    # 3. Stampa riepilogo
-    smith_reaction_assiale.print_summary()
+# 3. Stampa riepilogo
+#smith_action_assiale.print_summary()
 
-    # 4. Plotta il diagramma
-    smith_reaction_assiale.plot(target_point=(0.6243, 1.2198), highlight_deflection=100, save_path="smith_diagram_reaction_assiale.png")
+# 4. Plotta il diagramma
+#smith_action_assiale.plot(target_point=(0.6243, 1.2198), highlight_deflection=100, save_path="smith_diagram_action_assiale.png")
 
-    # 5. Testa le funzioni
-    print("\n🧪 TEST FUNZIONI:")
-    print("-" * 60)
+# 5. Testa le funzioni
+print("\n🧪 TEST FUNZIONI:")
+print("-" * 60)
 

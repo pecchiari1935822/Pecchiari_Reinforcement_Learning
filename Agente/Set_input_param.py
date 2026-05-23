@@ -1,5 +1,5 @@
 # Parametri che descrivono lunghezza episodio e lunghezza del training
-TOTAL_TIMESTEPS = 100_000
+TOTAL_TIMESTEPS = 10_000
 learning_rate = [0.0003]
 n_steps = [200]
 

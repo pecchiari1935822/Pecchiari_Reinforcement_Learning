@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from pathlib import Path
 
 
-class SmithDiagram:
+class SmithDiagram_Reaction_total_to_total:
     """
     Carica i file CSV da WebPlotDigitizer e costruisce il diagramma di Smith.
     """
@@ -196,7 +196,7 @@ class SmithDiagram:
         # ===== Formattazione =====
         ax.set_xlabel('Flow coefficient, φ', fontsize=15, fontweight='bold')
         ax.set_ylabel('Stage loading coefficient, ψ', fontsize=15, fontweight='bold')
-        ax.set_title('Smith Diagram - total to total', fontsize=15, fontweight='bold')
+        ax.set_title('Smith Diagram Reaction - total to total', fontsize=15, fontweight='bold')
         ax.legend(loc='upper left', title='Deflection angle', fontsize=13)
         ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', which='major', labelsize=15)
@@ -211,7 +211,7 @@ class SmithDiagram:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"✓ Grafico salvato: {save_path}")
 
-        plt.show()
+
         return fig, ax
 
     def print_summary(self):
@@ -235,21 +235,21 @@ class SmithDiagram:
 
 # ===== ESEMPIO DI USO =====
 
-if __name__ == "__main__":
 
-    # 1. Specifica il percorso della cartella con i CSV
-    csv_folder = Path(__file__).parent / "csv"  # ← Percorso aggiornato
 
-    # 2. Carica il diagramma
-    smith = SmithDiagram(csv_folder)
+# 1. Specifica il percorso della cartella con i CSV
+csv_folder = Path(__file__).parent / "csv"  # ← Percorso aggiornato
 
-    # 3. Stampa riepilogo
-    smith.print_summary()
+# 2. Carica il diagramma
+smith_reaction_total_to_total = SmithDiagram_Reaction_total_to_total(csv_folder)
 
-    # 4. Plotta il diagramma
-    smith.plot(target_point=(0.63, 1.22), highlight_deflection=80, save_path="smith_diagram_evidenziato.png")
+# 3. Stampa riepilogo
+#smith_reaction_total_to_total.print_summary()
 
-    # 5. Testa le funzioni
-    print("\n🧪 TEST FUNZIONI:")
-    print("-" * 60)
+# 4. Plotta il diagramma
+#smith_reaction_total_to_total.plot(target_point=(0.63, 1.22), highlight_deflection=80, save_path="smith_diagram_reaction_total_to_total.png")
+
+# 5. Testa le funzioni
+print("\n🧪 TEST FUNZIONI:")
+print("-" * 60)
 

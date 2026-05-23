@@ -922,6 +922,8 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
                 p_of.level = 0
 
 
+
+
 def pulisci_file_temporanei():
     """Elimina log, immagini temporanee e checkpoint, mantenendo solo Modelli e PPTX."""
     print("\n" + "=" * 60)
@@ -929,7 +931,11 @@ def pulisci_file_temporanei():
     print("=" * 60)
 
     # 1. Elimina le immagini dei grafici
-    immagini = ["plot_results.png", "plot_metrics_actor.png", "plot_metrics_critic.png","plot_dof_evolution_barre.png", "plot_dof_evolution.png"]
+    immagini = ["plot_results.png", "plot_metrics_actor.png", "plot_metrics_critic.png","plot_dof_evolution_barre.png",
+                "plot_dof_evolution.png", "smith_diagram_action_assiale.png",
+                "smith_diagram_action_total_to_total.png",
+                "smith_diagram_reaction_total_to_total.png"
+                ]
     for img in immagini:
         if os.path.exists(img):
             os.remove(img)

@@ -1,10 +1,13 @@
 import os
 import pandas as pd
 import numpy as np
+from pptx.util import Inches, Pt
 from Agente.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, OF_NAMES, TARGET_CSI
 from Agente.PPO import DOF_BOUNDS_ALL, DOF_NAMES_ALL, PPO_PARAMS, SURROGATE_MODEL_PATH, SCALER_PATH, aggiungi_slide_iterazione, train, pulisci_file_temporanei, Presentation, Path
 from Ambiente.Ambiente_claude_senza_keras import load_surrogate
-from Smith_Chart.Reaction_total_to_total.Smith_chart_reaction_total_to_total import smith
+from Smith_Chart.Reaction_total_to_total.Smith_chart_reaction_total_to_total import smith_reaction_total_to_total
+from Smith_Chart.Action_total_to_static.Smith_chart_uscita_assiale import smith_action_assiale
+from Smith_Chart.Action_total_to_total.Smith_chart_total_to_total import smith_action_total_to_total
 
 # ==========================================
 # TASK 1: Partenza casuale
@@ -85,6 +88,16 @@ def task_1(use_delta):
                 batch_size=batch_size, use_delta =use_delta, episode_length=episode_length
             )
 
+            phi_ottimale = float(best_of[OF_NAMES.index("OF_phi")])
+            psi_ottimale = float(best_of[OF_NAMES.index("OF_psi")])
+
+            smith_action_assiale.plot(target_point=(phi_ottimale, psi_ottimale), highlight_deflection=100,
+                                      save_path="smith_diagram_action_assiale.png")
+            smith_action_total_to_total.plot(target_point=(phi_ottimale, psi_ottimale), highlight_deflection=100,
+                                             save_path="smith_diagram_action_total_to_total.png")
+            smith_reaction_total_to_total.plot(target_point=(phi_ottimale, psi_ottimale), highlight_deflection=80,
+                                               save_path="smith_diagram_reaction_total_to_total.png")
+
             print(f"  ✓ Best CSI: {best_csi:.6f}")
             print(f"  ✓ Modello: {model_path}")
 
@@ -105,7 +118,8 @@ def task_1(use_delta):
                 "plot_dof_evolution.png",
                 "plot_dof_evolution_barre.png",
                 "plot_metrics_actor.png",
-                "plot_metrics_critic.png"
+                "plot_metrics_critic.png",
+
             ]
 
             # Aggiungi slide con risultati
@@ -124,6 +138,23 @@ def task_1(use_delta):
                 )
             except Exception as e:
                 print(f"  ⚠️  Errore nell'aggiunta slide: {e}")
+
+            slide = prs.slides.add_slide(prs.slide_layouts[4])
+            if slide.shapes.title:
+                slide.shapes.title.text = "Smith Diagram Action - Axial exit"
+            slide.shapes.add_picture("smith_diagram_action_assiale.png", Inches(1.5), Inches(1.2), height=Inches(5.2))
+
+            # Slide 2: Smith Diagram - Action Total to Total
+            slide = prs.slides.add_slide(prs.slide_layouts[4])
+            if slide.shapes.title:
+                slide.shapes.title.text = "Smith Diagram Action - Total to Total"
+            slide.shapes.add_picture("smith_diagram_action_total_to_total.png", Inches(1.5), Inches(1.2), height=Inches(5.2))
+
+            # Slide 3: Smith Diagram - Reaction Total to Total
+            slide = prs.slides.add_slide(prs.slide_layouts[4])
+            if slide.shapes.title:
+                slide.shapes.title.text = "Smith Diagram Reaction - Total to Total"
+            slide.shapes.add_picture("smith_diagram_reaction_total_to_total.png", Inches(1.5), Inches(1.2), height=Inches(5.2))
 
             # Salva risultati
             results.append({
@@ -359,7 +390,7 @@ def task_2(use_delta):
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    #task_1(True)
+    task_1(True)
     #task_1(False)
-    task_2(True)
+    #task_2(True)
     #task_2(False)
