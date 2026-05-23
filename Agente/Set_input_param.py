@@ -1,6 +1,6 @@
 # Parametri che descrivono lunghezza episodio e lunghezza del training
-TOTAL_TIMESTEPS = 200_000
-learning_rate = [0.00003]
+TOTAL_TIMESTEPS = 100_000
+learning_rate = [0.0003]
 n_steps = [200]
 
 # Azione che viene fatta dall'attore che interagisce con l'ambiente
@@ -19,7 +19,7 @@ PPO_PARAMS = dict(
 )
 
 # Cosa si vuole ottimizzare (quali DOF) e in quale riga del file di input
-ROW_INDEX = [710]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
+ROW_INDEX = [3]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
 
 DOF_BOUNDS_ALL = [
     (0.084,   0.140),    # DOF_PITCH_GEOM

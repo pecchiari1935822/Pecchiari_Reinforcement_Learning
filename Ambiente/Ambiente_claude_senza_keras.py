@@ -148,7 +148,9 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH,
 
     # Warm-up: prima chiamata lenta (compilazione grafo TF)
     print("  Warm-up tf.function (prima chiamata)...")
-    dummy = np.zeros(keras_model.input_shape[-1], dtype=np.float32)
+    dummy_low = np.array([b[0] for b in DOF_BOUNDS_ALL], dtype=np.float32)
+    dummy_high = np.array([b[1] for b in DOF_BOUNDS_ALL], dtype=np.float32)
+    dummy = np.random.uniform(dummy_low, dummy_high).astype(np.float32)
     predict(dummy)
     print("  Surrogate pronta.\n")
 
@@ -290,8 +292,6 @@ class BladeOptimEnv(gym.Env):
         return np.concatenate([dof_norm, of_vals, target_array]).astype(np.float32)
 
     def _get_observation(self):
-        # Estrai solo i DOF attivi dal vettore completo
-        self.current_dof_active = self.current_dof_full[ACTIVE_DOF_INDICES].copy()
 
         # Costruisci l'osservazione: DOF normalizzati + OF
         return self._build_obs(self.current_dof_active, self.current_of)
@@ -310,6 +310,7 @@ class BladeOptimEnv(gym.Env):
                 self.dof_low_all, self.dof_high_all
             ).astype(np.float32)
 
+        self.current_dof_active = self.current_dof_full[ACTIVE_DOF_INDICES].copy()
         self.current_of = self.predict(self.current_dof_full)
         self.start_of = self.current_of.copy()
         self.step_count = 0
@@ -358,7 +359,7 @@ class BladeOptimEnv(gym.Env):
         new_of = self.predict(new_dof_full).astype(np.float32)
 
         # Reward semplificata: minimizza CSI
-        tolleranza_max = 0.03
+        tolleranza_max = 0.05
         reward_val = compute_reward(new_of, prev_of, self.start_of, tolleranza=tolleranza_max)
         reward = float(np.squeeze(reward_val))
 

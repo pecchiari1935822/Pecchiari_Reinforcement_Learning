@@ -77,14 +77,14 @@ if __name__ == "__main__":
     DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
 
     df = pd.read_csv(DATASET_PATH)
-    riga_nuova_idx = 3
+    riga_nuova_idx = 710
     riga_nuova = df.iloc[riga_nuova_idx].values
     DOF_profilo = riga_nuova[2:9].astype(np.float32).copy()
     OF_profilo = riga_nuova[9:24].astype(np.float32).copy()
     csi_nuovo_originale = float(riga_nuova[11])
 
-    #modello_salvato = "ppo_task2_use_delta_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_riga[710]"
-    modello_salvato = "ppo_task1_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_con_delta"
+    modello_salvato = "ppo_task2_use_delta_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_riga[710]"
+    #modello_salvato = "ppo_task1_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_con_delta"
 
     print(f"\nProfilo da ottimizzare (riga {riga_nuova_idx}):")
     print(f"\nDOF {DOF_profilo}")

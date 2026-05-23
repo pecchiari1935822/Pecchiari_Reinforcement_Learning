@@ -211,7 +211,7 @@ def train(surrogate_fn,
 
     # check_env PRIMA di Monitor (evita bug NoneType)
     print("\n  Verifica ambiente...")
-    env_raw = BladeOptimEnv(surrogate, start_dof=start_dof, use_delta =use_delta, episode_length= episode_length)
+    env_raw = BladeOptimEnv(surrogate_fn, start_dof=start_dof, use_delta =use_delta, episode_length= episode_length)
     check_env(env_raw, warn=True)
     print("  Ambiente OK.\n")
 

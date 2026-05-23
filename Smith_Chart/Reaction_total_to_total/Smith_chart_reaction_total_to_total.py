@@ -247,7 +247,7 @@ if __name__ == "__main__":
     smith.print_summary()
 
     # 4. Plotta il diagramma
-    smith.plot(target_point=(0.6243, 1.2198), highlight_deflection=100, save_path="smith_diagram_evidenziato.png")
+    smith.plot(target_point=(0.63, 1.22), highlight_deflection=80, save_path="smith_diagram_evidenziato.png")
 
     # 5. Testa le funzioni
     print("\n🧪 TEST FUNZIONI:")

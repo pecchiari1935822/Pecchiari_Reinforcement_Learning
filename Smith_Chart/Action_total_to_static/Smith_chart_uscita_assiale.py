@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from pathlib import Path
 
 
-class SmithDiagram:
+class SmithDiagram_Reaction_Assiale:
     """
     Carica i file CSV da WebPlotDigitizer e costruisce il diagramma di Smith.
     """
@@ -246,7 +246,7 @@ class SmithDiagram:
         # ===== Formattazione =====
         ax.set_xlabel('Flow coefficient, φ', fontsize=15, fontweight='bold')
         ax.set_ylabel('Stage loading coefficient, ψ', fontsize=15, fontweight='bold')
-        ax.set_title('Smith Diagram - uscita assiale', fontsize=15, fontweight='bold')
+        ax.set_title('Smith Diagram Reaction - uscita assiale', fontsize=15, fontweight='bold')
         ax.legend(loc='upper left', title='Deflection angle', fontsize=13)
         ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', which='major', labelsize=15)
@@ -290,13 +290,13 @@ if __name__ == "__main__":
     csv_folder = Path(__file__).parent / "csv"  # ← Percorso aggiornato
 
     # 2. Carica il diagramma
-    smith = SmithDiagram(csv_folder)
+    smith_reaction_assiale = SmithDiagram_Reaction_Assiale(csv_folder)
 
     # 3. Stampa riepilogo
-    smith.print_summary()
+    smith_reaction_assiale.print_summary()
 
     # 4. Plotta il diagramma
-    smith.plot(target_point=(0.6243, 1.2198), highlight_deflection=100, save_path="smith_diagram_evidenziato.png")
+    smith_reaction_assiale.plot(target_point=(0.6243, 1.2198), highlight_deflection=100, save_path="smith_diagram_reaction_assiale.png")
 
     # 5. Testa le funzioni
     print("\n🧪 TEST FUNZIONI:")

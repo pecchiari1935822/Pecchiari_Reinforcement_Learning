@@ -4,6 +4,7 @@ import numpy as np
 from Agente.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, OF_NAMES, TARGET_CSI
 from Agente.PPO import DOF_BOUNDS_ALL, DOF_NAMES_ALL, PPO_PARAMS, SURROGATE_MODEL_PATH, SCALER_PATH, aggiungi_slide_iterazione, train, pulisci_file_temporanei, Presentation, Path
 from Ambiente.Ambiente_claude_senza_keras import load_surrogate
+from Smith_Chart.Reaction_total_to_total.Smith_chart_reaction_total_to_total import smith
 
 # ==========================================
 # TASK 1: Partenza casuale
@@ -186,6 +187,10 @@ def task_2(use_delta):
         prs = Presentation(TEMPLATE_PATH)
 
     df = pd.read_csv(DATASET_PATH)
+    df.columns = df.columns.str.replace("_OP_01", "", regex=False)
+    df.columns = df.columns.str.replace("_GEOM_", "", regex=False)
+    df.columns = df.columns.str.replace("_BC_", "", regex=False)
+
     for row_idx in ROW_INDEX:
         print(f"\nLettura dataset: {DATASET_PATH}")
         print(f"Estrazione riga numero: {row_idx}")
@@ -345,16 +350,16 @@ def task_2(use_delta):
 
                     aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_profile, start_of_originali)
 
-    if use_delta == True:
-        output_pptx = "Task2_delta.pptx"
-    else:
-        output_pptx = "Task2_mapping completo.pptx"
-    prs.save(output_pptx)
+        if use_delta == True:
+            output_pptx = f"Task2_delta_riga{row_idx}.pptx"
+        else:
+            output_pptx = f"Task2_mapping_completo_riga{row_idx}.pptx"
+        prs.save(output_pptx)
 
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    task_1(True)
-    task_1(False)
+    #task_1(True)
+    #task_1(False)
     task_2(True)
-    task_2(False)
+    #task_2(False)
