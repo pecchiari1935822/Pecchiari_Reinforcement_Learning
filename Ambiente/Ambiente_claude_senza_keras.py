@@ -211,6 +211,33 @@ def compute_reward(of_current, of_previous, of_start, tolleranza=None):
     # Ricompensa per l'ottimizzazione delle perdite con la penalità
     return reward_csi - penalty
 
+def compute_reward_target(of_current, of_previous, phi_target, psi_target,
+                          w_phi=50.0, w_psi=50.0, w_csi=1.0,
+                          tol_rel=0.01, bonus_in_tol=5.0):
+    """
+    - Penalizza la distanza da (phi_target, psi_target)
+    - Minimizza CSI
+    - Aggiunge un piccolo bonus se sei entro tolleranza su entrambi
+    """
+
+    if np.isnan(of_current).any() or np.isinf(of_current).any():
+        return -10.0
+
+    phi = float(of_current[IDX_PHI])
+    psi = float(of_current[IDX_PSI])
+    csi = float(of_current[IDX_CSI])
+
+    # errori relativi (robusti a scale diverse)
+    e_phi = abs(phi - phi_target) / (abs(phi_target) + 1e-8)
+    e_psi = abs(psi - psi_target) / (abs(psi_target) + 1e-8)
+
+    reward = -(w_phi * e_phi + w_psi * e_psi) - w_csi * csi
+
+    in_tol = (e_phi <= tol_rel) and (e_psi <= tol_rel)
+    if in_tol:
+        reward += bonus_in_tol
+
+    return float(reward)
 
 # ============================================================
 # AMBIENTE GYMNASIUM CUSTOM
@@ -228,7 +255,8 @@ class BladeOptimEnv(gym.Env):
     metadata = {"render_modes": ["human"]}
 
     def __init__(self, surrogate_fn, start_dof=None,
-                 action_scale=ACTION_SCALE, use_delta=False, episode_length=None):
+                 action_scale=ACTION_SCALE, use_delta=False, episode_length=None,
+                 target_phi=None, target_psi=None):
         super().__init__()
 
         self.use_delta = use_delta
@@ -238,6 +266,9 @@ class BladeOptimEnv(gym.Env):
         self.start_dof    = start_dof
         self.ep_length    = episode_length
         self.action_scale = action_scale
+
+        self.target_phi = target_phi
+        self.target_psi = target_psi
 
         n_active_dof = len(DOF_BOUNDS)          # DOF che l'agente può modificare
         n_of         = len(OF_NAMES)             # 15 OF prodotti dalla surrogate
@@ -358,17 +389,27 @@ class BladeOptimEnv(gym.Env):
         # Valuta il nuovo profilo (surrogate riceve sempre tutti e 7 i DOF)
         new_of = self.predict(new_dof_full).astype(np.float32)
 
-        # Reward semplificata: minimizza CSI
-        tolleranza_max = 0.05
-        reward_val = compute_reward(new_of, prev_of, self.start_of, tolleranza=tolleranza_max)
-        reward = float(np.squeeze(reward_val))
+        tolleranza_target = 0.03  # 1% (scegli tu)
 
-        # --- AGGIUNTA: Calcolo se il profilo rispetta i vincoli per dirlo alla Callback ---
-        errore_psi = abs(new_of[IDX_PSI] - self.start_of[IDX_PSI]) / (abs(self.start_of[IDX_PSI]) + 1e-8)
-        errore_phi = abs(new_of[IDX_PHI] - self.start_of[IDX_PHI]) / (abs(self.start_of[IDX_PHI]) + 1e-8)
+        if (self.target_phi is not None) and (self.target_psi is not None):
+            reward = compute_reward_target(
+                new_of, prev_of,
+                phi_target=self.target_phi,
+                psi_target=self.target_psi,
+                tol_rel=tolleranza_target
+            )
+        else:
+            # fallback: la tua reward attuale con vincoli su start_of
+            tolleranza_max = 0.05
+            reward_val = compute_reward(new_of, prev_of, self.start_of, tolleranza=tolleranza_max)
+            reward = float(np.squeeze(reward_val))
 
-        # True se ENTRAMBI gli errori sono sotto il 3%
-        is_valid = bool(errore_psi <= tolleranza_max and errore_phi <= tolleranza_max)
+            # --- AGGIUNTA: Calcolo se il profilo rispetta i vincoli per dirlo alla Callback ---
+            errore_psi = abs(new_of[IDX_PSI] - self.start_of[IDX_PSI]) / (abs(self.start_of[IDX_PSI]) + 1e-8)
+            errore_phi = abs(new_of[IDX_PHI] - self.start_of[IDX_PHI]) / (abs(self.start_of[IDX_PHI]) + 1e-8)
+
+            # True se ENTRAMBI gli errori sono sotto il 3%
+            is_valid = bool(errore_psi <= tolleranza_max and errore_phi <= tolleranza_max)
 
         # Aggiorna stato interno
         self.current_dof_active = new_dof_active
@@ -380,16 +421,27 @@ class BladeOptimEnv(gym.Env):
 
         obs = self._build_obs(self.current_dof_active, self.current_of)
 
-        # Aggiungiamo 'is_valid' al dizionario info
-        info = {
-            "efficiency": None,
-            "csi": float(new_of[IDX_CSI]),
-            "psi": float(new_of[IDX_PSI]),
-            "dof_active": self.current_dof_active.copy(),
-            "dof_full": self.current_dof_full.copy(),
-            "of": self.current_of.copy(),
-            "is_valid": is_valid  # <--- AGGIUNTO QUI
-        }
+        if (self.target_phi is not None) and (self.target_psi is not None):
+            # Aggiungiamo 'is_valid' al dizionario info
+            info = {
+                "efficiency": None,
+                "csi": float(new_of[IDX_CSI]),
+                "psi": float(new_of[IDX_PSI]),
+                "dof_active": self.current_dof_active.copy(),
+                "dof_full": self.current_dof_full.copy(),
+                "of": self.current_of.copy(),
+
+            }
+        else:
+            info = {
+                "efficiency": None,
+                "csi": float(new_of[IDX_CSI]),
+                "psi": float(new_of[IDX_PSI]),
+                "dof_active": self.current_dof_active.copy(),
+                "dof_full": self.current_dof_full.copy(),
+                "of": self.current_of.copy(),
+                "is_valid": is_valid  # <--- AGGIUNTO QUI
+            }
 
         return obs, reward, terminated, truncated, info
 

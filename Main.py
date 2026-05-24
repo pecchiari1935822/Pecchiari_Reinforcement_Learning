@@ -183,7 +183,7 @@ def task_1(use_delta):
     print("  TASK 1 COMPLETATO!")
     print("="*70)
     print(f"\n  📊 Presentazione salvata: {output_pptx}")
-    print(f"  📋 Risultati salvati: {csv_path}")
+
     print(f"\n  Riepilogo:")
 
     print(f"    - Miglior CSI globale: {df_results['best_csi'].min():.6f}")
@@ -341,6 +341,20 @@ def task_2(use_delta):
                         learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX, use_delta =use_delta, episode_length=episode_length
                     )
 
+                    phi_ottimale = float(best_of[OF_NAMES.index("OF_phi")])
+                    psi_ottimale = float(best_of[OF_NAMES.index("OF_psi")])
+
+                    smith_action_assiale.plot(target_point=(phi_ottimale, psi_ottimale), highlight_deflection=100,
+                                              save_path="smith_diagram_action_assiale.png")
+                    smith_action_total_to_total.plot(target_point=(phi_ottimale, psi_ottimale),
+                                                     highlight_deflection=100,
+                                                     save_path="smith_diagram_action_total_to_total.png")
+                    smith_reaction_total_to_total.plot(target_point=(phi_ottimale, psi_ottimale),
+                                                       highlight_deflection=80,
+                                                       save_path="smith_diagram_reaction_total_to_total.png")
+
+
+
 
                     # 6. Confronto Finale PPO vs Dataset
                     miglioramento = csi_originale - best_csi
@@ -381,6 +395,26 @@ def task_2(use_delta):
 
                     aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_profile, start_of_originali)
 
+                    slide = prs.slides.add_slide(prs.slide_layouts[4])
+                    if slide.shapes.title:
+                        slide.shapes.title.text = "Smith Diagram Action - Axial exit"
+                    slide.shapes.add_picture("smith_diagram_action_assiale.png", Inches(1.5), Inches(1.2),
+                                             height=Inches(5.2))
+
+                    # Slide 2: Smith Diagram - Action Total to Total
+                    slide = prs.slides.add_slide(prs.slide_layouts[4])
+                    if slide.shapes.title:
+                        slide.shapes.title.text = "Smith Diagram Action - Total to Total"
+                    slide.shapes.add_picture("smith_diagram_action_total_to_total.png", Inches(1.5), Inches(1.2),
+                                             height=Inches(5.2))
+
+                    # Slide 3: Smith Diagram - Reaction Total to Total
+                    slide = prs.slides.add_slide(prs.slide_layouts[4])
+                    if slide.shapes.title:
+                        slide.shapes.title.text = "Smith Diagram Reaction - Total to Total"
+                    slide.shapes.add_picture("smith_diagram_reaction_total_to_total.png", Inches(1.5), Inches(1.2),
+                                             height=Inches(5.2))
+
         if use_delta == True:
             output_pptx = f"Task2_delta_riga{row_idx}.pptx"
         else:
@@ -391,6 +425,6 @@ def task_2(use_delta):
 
 if __name__ == "__main__":
     task_1(True)
-    #task_1(False)
-    #task_2(True)
+    task_1(False)
+    task_2(True)
     #task_2(False)

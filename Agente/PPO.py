@@ -211,7 +211,8 @@ def train(surrogate_fn,
 
     # check_env PRIMA di Monitor (evita bug NoneType)
     print("\n  Verifica ambiente...")
-    env_raw = BladeOptimEnv(surrogate_fn, start_dof=start_dof, use_delta =use_delta, episode_length= episode_length)
+    env_raw = BladeOptimEnv(surrogate_fn, start_dof=start_dof, use_delta =use_delta, episode_length= episode_length,
+                            target_phi=0.5, target_psi=1.2)
     check_env(env_raw, warn=True)
     print("  Ambiente OK.\n")
 
@@ -945,6 +946,8 @@ def pulisci_file_temporanei():
     for monitor_file in glob.glob("*monitor*.csv"):
         os.remove(monitor_file)
         print(f"  [X] Eliminato: {monitor_file}")
+
+    os.remove("task1_results.csv")
 
     # 3. Elimina le cartelle di Checkpoint e Log di TensorBoard
     # Trova tutte le cartelle che corrispondono a questi pattern
