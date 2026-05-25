@@ -285,9 +285,10 @@ def task_2(use_delta):
 
             # 2. Estrai i 7 DOF (dal 3° al 9° valore -> indici da 2 a 8)
             start_profile = row[DOF_NAMES_ALL].values.astype(np.float32).copy()
+            start_of_originali = row[OF_NAMES].values.astype(np.float32)
 
             # Perturbazione del dof attivo (che si vuole ottimizzare)
-            '''for idx in active_dof:
+            for idx in active_dof:
                 val_originale = start_profile[idx]
                 min_bound, max_bound = DOF_BOUNDS_ALL[idx]
 
@@ -315,7 +316,7 @@ def task_2(use_delta):
                 print(f"  (CSI originale: {csi_originale:.6f}  -->  Perturbato a: {csi_modificato:.6f})")
 
             print("-------------------------------------------------")
-            print("\nI DOF attivi sono stati spostati ai loro limiti per testare il PPO.")'''
+            print("\nI DOF attivi sono stati spostati ai loro limiti per testare il PPO.")
 
             print(f"\nProfilo di partenza per il PPO: {start_profile}.3f")
 
@@ -338,7 +339,8 @@ def task_2(use_delta):
                     model, best_dof, best_of, best_csi, model_ = train(
                         surrogate_fn=surrogate_fn,
                         start_dof=start_profile,
-                        learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX, use_delta =use_delta, episode_length=episode_length
+                        learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX, use_delta =use_delta, episode_length=episode_length,
+                        ref_of=start_of_originali
                     )
 
                     phi_ottimale = float(best_of[OF_NAMES.index("OF_phi")])
@@ -391,7 +393,7 @@ def task_2(use_delta):
                     # 3. Aggiungi i risultati alla presentazione
                     img_paths = [path_img1, path_img2, path_img3, path_img4, path_img5]
 
-                    start_of_originali = row[OF_NAMES].values.astype(np.float32)
+
 
                     aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_profile, start_of_originali)
 
@@ -424,7 +426,7 @@ def task_2(use_delta):
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    task_1(True)
-    task_1(False)
+    #task_1(True)
+    #task_1(False)
     task_2(True)
     #task_2(False)

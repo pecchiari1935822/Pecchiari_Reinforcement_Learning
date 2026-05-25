@@ -1,7 +1,7 @@
 # Parametri che descrivono lunghezza episodio e lunghezza del training
 TOTAL_TIMESTEPS = 200_000
-learning_rate = [0.0003, 0.00003]
-n_steps = [200]
+learning_rate = [ 0.00003]
+n_steps = [200, 1024]
 
 # Azione che viene fatta dall'attore che interagisce con l'ambiente
 ACTION_SCALE   = 0.05

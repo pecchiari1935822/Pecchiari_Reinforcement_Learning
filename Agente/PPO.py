@@ -202,7 +202,7 @@ class BladeCallback(BaseCallback):
 
 def train(surrogate_fn,
           start_dof=None,
-          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta = True, episode_length=None):
+          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta = True, episode_length=None, ref_of=None):
     print("=" * 60)
     print("  PPO Blade Optimization — Stable Baselines3")
     print(f"  DOF attivi: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}")
@@ -212,7 +212,7 @@ def train(surrogate_fn,
     # check_env PRIMA di Monitor (evita bug NoneType)
     print("\n  Verifica ambiente...")
     env_raw = BladeOptimEnv(surrogate_fn, start_dof=start_dof, use_delta =use_delta, episode_length= episode_length,
-                            target_phi=0.5, target_psi=1.2)
+                            target_phi=None, target_psi=None, ref_of=ref_of)
     check_env(env_raw, warn=True)
     print("  Ambiente OK.\n")
 

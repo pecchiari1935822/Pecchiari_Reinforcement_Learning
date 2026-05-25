@@ -256,7 +256,7 @@ class BladeOptimEnv(gym.Env):
 
     def __init__(self, surrogate_fn, start_dof=None,
                  action_scale=ACTION_SCALE, use_delta=False, episode_length=None,
-                 target_phi=None, target_psi=None):
+                 target_phi=None, target_psi=None, ref_of=None):
         super().__init__()
 
         self.use_delta = use_delta
@@ -264,6 +264,7 @@ class BladeOptimEnv(gym.Env):
 
         self.predict      = surrogate_fn
         self.start_dof    = start_dof
+        self.ref_of = ref_of
         self.ep_length    = episode_length
         self.action_scale = action_scale
 
@@ -346,6 +347,9 @@ class BladeOptimEnv(gym.Env):
         self.start_of = self.current_of.copy()
         self.step_count = 0
 
+        if self.ref_of is None:
+            self.ref_of = self.start_of.copy()
+
         obs = self._get_observation()
         return obs, {}
 
@@ -401,12 +405,11 @@ class BladeOptimEnv(gym.Env):
         else:
             # fallback: la tua reward attuale con vincoli su start_of
             tolleranza_max = 0.05
-            reward_val = compute_reward(new_of, prev_of, self.start_of, tolleranza=tolleranza_max)
+            reward_val = compute_reward(new_of, prev_of, self.ref_of, tolleranza=tolleranza_max)
             reward = float(np.squeeze(reward_val))
 
-            # --- AGGIUNTA: Calcolo se il profilo rispetta i vincoli per dirlo alla Callback ---
-            errore_psi = abs(new_of[IDX_PSI] - self.start_of[IDX_PSI]) / (abs(self.start_of[IDX_PSI]) + 1e-8)
-            errore_phi = abs(new_of[IDX_PHI] - self.start_of[IDX_PHI]) / (abs(self.start_of[IDX_PHI]) + 1e-8)
+            errore_psi = abs(new_of[IDX_PSI] - self.ref_of[IDX_PSI]) / (abs(self.ref_of[IDX_PSI]) + 1e-8)
+            errore_phi = abs(new_of[IDX_PHI] - self.ref_of[IDX_PHI]) / (abs(self.ref_of[IDX_PHI]) + 1e-8)
 
             # True se ENTRAMBI gli errori sono sotto il 3%
             is_valid = bool(errore_psi <= tolleranza_max and errore_phi <= tolleranza_max)
