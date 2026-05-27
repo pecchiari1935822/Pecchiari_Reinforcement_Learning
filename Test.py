@@ -4,7 +4,7 @@ import pandas as pd
 
 
 from stable_baselines3 import PPO
-from Ambiente.Ambiente_claude_senza_keras import BladeOptimEnv, load_surrogate, DOF_BOUNDS_ALL
+from Ambiente.Ambiente import BladeOptimEnv, load_surrogate, DOF_BOUNDS_ALL
 from Agente.PPO import SURROGATE_MODEL_PATH, SCALER_PATH, Path
 
 import matplotlib.pyplot as plt
@@ -67,7 +67,7 @@ def plot_inferenza_results(steps_csi, best_csi, csi_originale, ep_length, modell
 if __name__ == "__main__":
     from stable_baselines3 import PPO
 
-    import Ambiente.Ambiente_claude_senza_keras as env_module
+    import Ambiente.Ambiente as env_module
 
     active_dof_per_test = [0, 1, 2, 3, 4, 5, 6]
     env_module.ACTIVE_DOF_INDICES = active_dof_per_test

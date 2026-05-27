@@ -1,24 +1,24 @@
 import pandas as pd
-from Agente.PPO import Path
+from pathlib import Path
+import matplotlib.pyplot as plt
 
 
 DATABASE_DIR = Path(__file__).parent.resolve()
 DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
 
-
-
 df = pd.read_csv(DATASET_PATH)
 
-nome_colonna = 'OF_CSI_OP_01'
-valore_limite = 0.016535
+nome_colonna = 'OF_alfa_ex_OP_01'
+nome_beta1 = 'DOF_BETA1_GEOM_'
+nome_beta2 = 'DOF_BETA2_GEOM_'
+alfa_ex = df[nome_colonna]
+beta1 = df[nome_beta1]
+beta2 = df[nome_beta2]
 
-# Applica il filtro
-righe_filtrate = df[df[nome_colonna] <= valore_limite]
+for indice, (a_ex, b1, b2) in enumerate(zip(alfa_ex, beta1, beta2)):
 
-print(f"\n--- RISULTATI DELLA RICERCA ---")
-if not righe_filtrate.empty:
-    print(f"Trovate {len(righe_filtrate)} righe in cui '{nome_colonna}' è < {valore_limite}:")
-    # Stampa le righe trovate allineate
-    print(righe_filtrate.to_string())
-else:
-    print(f"Nessun valore trovato nella colonna '{nome_colonna}' minore di {valore_limite}.")
+    deflessione_alfa = 10 - a_ex
+    deflessione_beta = b1 - b2
+    print(f"\nRiga {indice}:")
+    print(f"deflessione alfa: {deflessione_alfa:.3f}")
+    print(f"deflessione beta: {deflessione_beta:.3f}")
