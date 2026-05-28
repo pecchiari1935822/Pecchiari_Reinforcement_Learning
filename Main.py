@@ -74,9 +74,14 @@ def task_1(use_delta):
             beta_1_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA1")])
             beta_2_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA2")])
 
-            deflessione_flusso = alpha_in_ottimale - alpha_ex_ottimale
-
-            plot_smith(phi_ottimale, psi_ottimale, deflessione_flusso)
+            plot_smith(
+                phi_ottimale=phi_ottimale,
+                psi_ottimale=psi_ottimale,
+                defl_min=40,
+                defl_max=140,
+                step=1,  # ← Interpola ogni 1°
+                validate=True
+            )
 
             print(f"  ✓ Best CSI: {best_csi:.6f}")
             print(f"  ✓ Modello: {model_path}")
@@ -175,7 +180,7 @@ def task_2(use_delta):
     # 1. Imposta il percorso del tuo dataset e la riga che vuoi analizzare
     DATABASE_DIR = Path(__file__).parent.resolve()
     DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
-    TEMPLATE_PATH = str(DATABASE_DIR / "Agente" / "Template.pptx")
+    TEMPLATE_PATH = str(DATABASE_DIR / "Report" / "Template.pptx")
 
     if os.path.exists(TEMPLATE_PATH):
         print(f"Caricamento template da: {TEMPLATE_PATH}")
@@ -293,9 +298,16 @@ def task_2(use_delta):
                     beta_1_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA1")])
                     beta_2_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA2")])
 
-                    deflessione_flusso = alpha_in_ottimale - alpha_ex_ottimale
 
-                    plot_smith(phi_ottimale, psi_ottimale, deflessione_flusso)
+
+                    plot_smith(
+                        phi_ottimale=phi_ottimale,
+                        psi_ottimale=psi_ottimale,
+                        defl_min=40,
+                        defl_max=140,
+                        step=1,  # ← Interpola ogni 1°
+                        validate=True
+                    )
 
                     # 6. Confronto Finale PPO vs Dataset
                     miglioramento = csi_originale - best_csi
@@ -349,5 +361,5 @@ def task_2(use_delta):
 if __name__ == "__main__":
     task_1(True)
     #task_1(False)
-    #task_2(True)
+    task_2(True)
     #task_2(False)

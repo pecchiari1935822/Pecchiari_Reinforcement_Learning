@@ -206,7 +206,7 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
         try:
             # === RECUPERA I VALORI PER I CALCOLI ===
             # Esempio: OF_alfa_ex_OP_01 è il nome usato nel DB per l'angolo di uscita, lo recupero in best_of
-            idx_alpha_ex = OF_NAMES.index("OF_alfa_ex_OP_01")
+            idx_alpha_ex = OF_NAMES.index("OF_alfa_ex")
             alpha_ex_deg = best_of[idx_alpha_ex]
 
             # alpha0 fisso a 10 gradi come avevi già scritto
@@ -269,19 +269,19 @@ def aggiungi_smith(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[4])
     if slide.shapes.title:
         slide.shapes.title.text = "Smith Diagram Action - Axial exit"
-    slide.shapes.add_picture("smith_diagram_action_assiale.png", Inches(1.5), Inches(1.2),
-                             height=Inches(5.2))
+    slide.shapes.add_picture("smith_diagram_action_assiale.png", Inches(2.2), Inches(1.2),
+                             height=Inches(6.2))
 
     # Slide 2: Smith Diagram - Action Total to Total
     slide = prs.slides.add_slide(prs.slide_layouts[4])
     if slide.shapes.title:
         slide.shapes.title.text = "Smith Diagram Action - Total to Total"
-    slide.shapes.add_picture("smith_diagram_action_total_to_total.png", Inches(1.5), Inches(1.2),
-                             height=Inches(5.2))
+    slide.shapes.add_picture("smith_diagram_action_total_to_total.png", Inches(2.2), Inches(1.2),
+                             height=Inches(6.2))
 
     # Slide 3: Smith Diagram - Reaction Total to Total
     slide = prs.slides.add_slide(prs.slide_layouts[4])
     if slide.shapes.title:
         slide.shapes.title.text = "Smith Diagram Reaction - Total to Total"
-    slide.shapes.add_picture("smith_diagram_reaction_total_to_total.png", Inches(1.5), Inches(1.2),
-                             height=Inches(5.2))
+    slide.shapes.add_picture("smith_diagram_reaction_total_to_total.png", Inches(2.2), Inches(1.2),
+                             height=Inches(6.2))

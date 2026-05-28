@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from Agente.PPO import Path
+from pathlib import Path
 
 
 

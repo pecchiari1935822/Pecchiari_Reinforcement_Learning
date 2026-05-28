@@ -3,9 +3,10 @@ from Config.Set_input_param import n_dof_totali,DOF_NAMES_ALL
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from Smith_Chart.Reaction_total_to_total.Smith_chart_reaction_total_to_total import smith_reaction_total_to_total
-from Smith_Chart.Action_total_to_static.Smith_chart_action_uscita_assiale import smith_action_assiale
-from Smith_Chart.Action_total_to_total.Smith_chart_action_total_to_total import smith_action_total_to_total
+from Smith_Chart.Reaction_total_to_total.Smith_chart_reaction_total_to_total import SmithDiagram_Reaction_total_to_total
+from Smith_Chart.Action_total_to_static.Smith_chart_action_uscita_assiale import SmithDiagram_Action_Assiale
+from Smith_Chart.Action_total_to_total.Smith_chart_action_total_to_total import SmithDiagram_Action_total_to_total
+from pathlib import Path
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -431,10 +432,125 @@ def _plot_training_metrics_critic(cb: 'BladeCallback',lr , n_step, save_path="pl
 
     return save_path
 
-def plot_smith(phi_ottimale, psi_ottimale, deflessione_flusso):
-    smith_action_assiale.plot(target_point=(phi_ottimale, psi_ottimale), highlight_deflection=deflessione_flusso,
-                              save_path="smith_diagram_action_assiale.png")
-    smith_action_total_to_total.plot(target_point=(phi_ottimale, psi_ottimale), highlight_deflection=deflessione_flusso,
-                                     save_path="smith_diagram_action_total_to_total.png")
-    smith_reaction_total_to_total.plot(target_point=(phi_ottimale, psi_ottimale), highlight_deflection=deflessione_flusso,
-                                       save_path="smith_diagram_reaction_total_to_total.png")
+
+def plot_smith(phi_ottimale, psi_ottimale, defl_min=40, defl_max=140, step=1, validate=True):
+    """
+    Plotta i diagrammi di Smith (Reaction T-T, Action Assiale, Action T-T).
+
+    Carica i dati CSV, interpola le curve per BLOCCHI con flat extrapolation,
+    stima la deflessione dal punto (phi, psi) e evidenzia la curva.
+    """
+
+    BASE_DIR = Path(__file__).resolve().parents[1]
+
+    # ========== REACTION TOTAL-TO-TOTAL ==========
+    smith_reaction_total_to_total = SmithDiagram_Reaction_total_to_total(
+        BASE_DIR / "Smith_Chart" / "Reaction_total_to_total" / "csv"
+    )
+
+    # Interpola per blocchi con flat extrapolation
+    smith_reaction_total_to_total.add_interpolated_deflection_curves_by_blocks(
+        step=step,
+        n_points=600,
+        overwrite=False
+    )
+
+    # Validazione (opzionale)
+    if validate:
+        print("🔍 Validazione interpolazione Reaction T-T...")
+        report_reaction = smith_reaction_total_to_total.validate_interpolation(
+            defl_min=defl_min, defl_max=defl_max, tolerance_psi=0.04
+        )
+        if report_reaction['failed'] / report_reaction['total_tests'] > 0.2:
+            print("⚠️  ATTENZIONE: >20% dei test falliti!")
+
+    # Stima deflessione
+    d_hat = smith_reaction_total_to_total.estimate_deflection_nearest_integer(
+        phi_ottimale, psi_ottimale, defl_min=defl_min, defl_max=defl_max
+    )
+
+    # Plot
+    if d_hat is None:
+        print("[Smith Reaction T-T] Punto fuori dominio.")
+        smith_reaction_total_to_total.plot(
+            target_point=(phi_ottimale, psi_ottimale),
+            highlight_deflection=None,
+            save_path="smith_diagram_reaction_total_to_total.png"
+        )
+    else:
+        smith_reaction_total_to_total.plot(
+            target_point=(phi_ottimale, psi_ottimale),
+            highlight_deflection=int(d_hat),
+            save_path="smith_diagram_reaction_total_to_total.png"
+        )
+
+    # ========== ACTION ASSIALE ==========
+    smith_action_assiale = SmithDiagram_Action_Assiale(
+        BASE_DIR / "Smith_Chart" / "Action_total_to_static" / "csv"
+    )
+
+    smith_action_assiale.add_interpolated_deflection_curves_by_blocks(
+        step=step,
+        n_points=600,
+        overwrite=False
+    )
+
+    if validate:
+        print("🔍 Validazione interpolazione Action Assiale...")
+        report_assiale = smith_action_assiale.validate_interpolation(
+            defl_min=defl_min, defl_max=defl_max, tolerance_psi=0.04
+        )
+
+    d_hat2 = smith_action_assiale.estimate_deflection_nearest_integer(
+        phi_ottimale, psi_ottimale, defl_min=defl_min, defl_max=defl_max
+    )
+
+    if d_hat2 is None:
+        print("[Smith Action Assiale] Punto fuori dominio.")
+        smith_action_assiale.plot(
+            target_point=(phi_ottimale, psi_ottimale),
+            highlight_deflection=None,
+            save_path="smith_diagram_action_assiale.png"
+        )
+    else:
+        smith_action_assiale.plot(
+            target_point=(phi_ottimale, psi_ottimale),
+            highlight_deflection=int(d_hat2),
+            save_path="smith_diagram_action_assiale.png"
+        )
+
+    # ========== ACTION TOTAL-TO-TOTAL ==========
+    smith_action_total_to_total = SmithDiagram_Action_total_to_total(
+        BASE_DIR / "Smith_Chart" / "Action_total_to_total" / "csv"
+    )
+
+    smith_action_total_to_total.add_interpolated_deflection_curves_by_blocks(
+        step=step,
+        n_points=600,
+        overwrite=False
+    )
+
+    if validate:
+        print("🔍 Validazione interpolazione Action T-T...")
+        report_total = smith_action_total_to_total.validate_interpolation(
+            defl_min=defl_min, defl_max=defl_max, tolerance_psi=0.04
+        )
+
+    d_hat3 = smith_action_total_to_total.estimate_deflection_nearest_integer(
+        phi_ottimale, psi_ottimale, defl_min=defl_min, defl_max=defl_max
+    )
+
+    if d_hat3 is None:
+        print("[Smith Action T-T] Punto fuori dominio.")
+        smith_action_total_to_total.plot(
+            target_point=(phi_ottimale, psi_ottimale),
+            highlight_deflection=None,
+            save_path="smith_diagram_action_total_to_total.png"
+        )
+    else:
+        smith_action_total_to_total.plot(
+            target_point=(phi_ottimale, psi_ottimale),
+            highlight_deflection=int(d_hat3),
+            save_path="smith_diagram_action_total_to_total.png"
+        )
+
