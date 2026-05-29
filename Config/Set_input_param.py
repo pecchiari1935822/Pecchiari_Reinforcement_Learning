@@ -19,7 +19,7 @@ PPO_PARAMS = dict(
 )
 
 # Cosa si vuole ottimizzare (quali DOF) e in quale riga del file di input
-ROW_INDEX = [710, 456, 345]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
+ROW_INDEX = [62]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
 
 DOF_BOUNDS_ALL = [
     (0.084,   0.140),    # DOF_PITCH_GEOM

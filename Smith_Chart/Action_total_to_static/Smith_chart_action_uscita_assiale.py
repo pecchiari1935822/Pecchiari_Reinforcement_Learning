@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from pathlib import Path
+import matplotlib.colors as mcolors
 
 from Smith_Chart.Action_total_to_total.Smith_chart_action_total_to_total import SmithDiagram_Action_total_to_total
 
@@ -472,7 +473,7 @@ class SmithDiagram_Action_Assiale:
 
         return defl_label
 
-    def plot(self, figsize=(12, 9), save_path=None, target_point=None, highlight_deflection=None):
+    def plot(self, figsize=(12, 9), save_path=None, target_point=None, highlight_deflection=None, scatter_data=None):
         """
         Plotta il diagramma di Smith.
         Regole:
@@ -598,12 +599,47 @@ class SmithDiagram_Action_Assiale:
                 zorder=10
             )
 
+        if scatter_data is not None:
+
+            phi_s = np.asarray(scatter_data['phi'])
+            psi_s = np.asarray(scatter_data['psi'])
+            vals = np.asarray(scatter_data['values'])
+            lbl = scatter_data.get('label', 'Losses')
+            cmap = scatter_data.get('cmap', 'RdYlGn_r')
+            pct = scatter_data.get('percentile_highlight', 10)
+            sz = scatter_data.get('size', 40)
+            alpha = scatter_data.get('alpha', 0.75)
+
+            vmin, vmax = np.nanpercentile(vals, 2), np.nanpercentile(vals, 98)
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+            scatter = ax.scatter(phi_s, psi_s, c=vals, cmap=cmap, norm=norm,
+                                 s=sz, alpha=alpha, edgecolors='black', linewidths=0.4, zorder=8)
+            cbar = plt.colorbar(scatter, ax=ax, pad=0.02)
+            cbar.set_label(lbl, fontsize=13, fontweight='bold')
+            cbar.ax.tick_params(labelsize=11)
+
+            if pct is not None and pct > 0:
+                thr_low = np.nanpercentile(vals, pct)
+                thr_high = np.nanpercentile(vals, 100 - pct)
+                mask_best = vals <= thr_low
+                mask_worst = vals >= thr_high
+
+                ax.scatter(phi_s[mask_best], psi_s[mask_best],
+                           c=vals[mask_best], cmap=cmap, norm=norm,
+                           s=sz * 1.8, edgecolors='lime', linewidths=1.8, zorder=9,
+                           label=f'Migliori {pct}% ({lbl} basso)')
+                ax.scatter(phi_s[mask_worst], psi_s[mask_worst],
+                           c=vals[mask_worst], cmap=cmap, norm=norm,
+                           s=sz * 1.8, edgecolors='darkred', linewidths=1.8, zorder=9,
+                           label=f'Peggiori {pct}% ({lbl} alto)')
+
         # ----------------------------
         # 5) Formattazione
         # ----------------------------
         ax.set_xlabel("Flow coefficient, φ", fontsize=16, fontweight="bold")
         ax.set_ylabel("Stage loading coefficient, ψ", fontsize=16, fontweight="bold")
-        ax.set_title("Smith Diagram Action - uscita assiale", fontsize=16, fontweight="bold")
+        ax.set_title("Smith Diagram Action — Total to total", fontsize=16, fontweight="bold")
 
         handles, labels = ax.get_legend_handles_labels()
         if labels:
@@ -623,6 +659,103 @@ class SmithDiagram_Action_Assiale:
             print(f"✓ Grafico salvato: {save_path}")
 
         return fig, ax
+
+    def plot_losses_comparison(self, phi, psi, csi, cpt, figsize=(18, 8), save_path=None):
+        """
+        Crea due diagrammi di Smith affiancati:
+          - Sinistra: scatter colorato per CSI (perdite di pressione statica)
+          - Destra:   scatter colorato per CPT (perdite di pressione totale)
+
+        Utile per confrontare come le due misure di perdita si distribuiscono
+        sullo stesso spazio (phi, psi).
+        """
+        fig, axes = plt.subplots(1, 2, figsize=figsize, sharey=True)
+
+        datasets = [
+            {'values': csi, 'label': 'CSI  (perdite pressione statica)', 'ax': axes[0]},
+            {'values': cpt, 'label': 'CPT  (perdite pressione totale)', 'ax': axes[1]},
+        ]
+
+        phi = np.asarray(phi)
+        psi = np.asarray(psi)
+
+        bbox_props = dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85)
+
+        for item in datasets:
+            ax = item['ax']
+            vals = np.asarray(item['values'])
+            lbl = item['label']
+
+            # --- sfondo diagramma di Smith ---
+            for deflection in sorted(self.base_deflections):
+                if deflection not in self.deflection_curves:
+                    continue
+                pts = self.deflection_curves[deflection]
+                pts = pts[np.argsort(pts[:, 0])]
+                ax.plot(pts[:, 0], pts[:, 1], color='black', linestyle='--',
+                        linewidth=1.4, alpha=0.4, zorder=1)
+                if len(pts) > 0:
+                    idx = len(pts) // 4
+                    ax.text(pts[idx, 0], pts[idx, 1], f"{deflection}°",
+                            fontsize=11, fontweight="bold", color='black',
+                            ha="center", va="center", bbox=bbox_props, zorder=5)
+
+            for efficiency, points in sorted(self.efficiency_curves.items()):
+                points_sorted = self._sort_curve_points(points)
+                ax.plot(points_sorted[:, 0], points_sorted[:, 1], 'k--',
+                        linewidth=2.0, alpha=0.5, zorder=1)
+                valid_points = points_sorted[~np.isnan(points_sorted[:, 0])]
+                if len(valid_points) > 0:
+                    ax.text(valid_points[-1, 0], valid_points[-1, 1],
+                            f"  η={efficiency:.2f}", fontsize=11,
+                            verticalalignment="center_baseline",
+                            horizontalalignment="center", zorder=6)
+
+            # --- scatter ---
+            vmin = np.nanpercentile(vals, 2)
+            vmax = np.nanpercentile(vals, 98)
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+            sc = ax.scatter(phi, psi, c=vals, cmap='RdYlGn_r', norm=norm,
+                            s=35, alpha=0.75, edgecolors='black', linewidths=0.35, zorder=8)
+
+            cbar = plt.colorbar(sc, ax=ax, pad=0.02)
+            cbar.set_label(lbl.split('(')[0].strip(), fontsize=12, fontweight='bold')
+            cbar.ax.tick_params(labelsize=10)
+
+            # Evidenzia migliori (verde lime) e peggiori (rosso scuro) — top/bottom 10%
+            thr_low = np.nanpercentile(vals, 10)
+            thr_high = np.nanpercentile(vals, 90)
+            mask_best = vals <= thr_low
+            mask_worst = vals >= thr_high
+
+            ax.scatter(phi[mask_best], psi[mask_best],
+                       c=vals[mask_best], cmap='RdYlGn_r', norm=norm,
+                       s=60, edgecolors='lime', linewidths=1.8, zorder=9,
+                       label='Migliori 10%')
+            ax.scatter(phi[mask_worst], psi[mask_worst],
+                       c=vals[mask_worst], cmap='RdYlGn_r', norm=norm,
+                       s=60, edgecolors='darkred', linewidths=1.8, zorder=9,
+                       label='Peggiori 10%')
+
+            ax.set_xlabel("Flow coefficient, φ", fontsize=14, fontweight="bold")
+            ax.set_ylabel("Stage loading coefficient, ψ", fontsize=14, fontweight="bold")
+            ax.set_title(lbl, fontsize=13, fontweight="bold")
+            ax.legend(loc='upper left', fontsize=10, framealpha=0.9)
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(axis="both", which="major", labelsize=12)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 2)
+
+        fig.suptitle("Distribuzione delle perdite sul Diagramma di Smith",
+                     fontsize=15, fontweight='bold', y=1.01)
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches="tight")
+            print(f"✓ Grafico salvato: {save_path}")
+
+        return fig, axes
 
     def print_summary(self):
         """Stampa riepilogo delle curve caricate."""
@@ -669,37 +802,48 @@ if __name__ == "__main__":
     plt.show()
 
     # 3. Stampa riepilogo (se vuoi)
-    '''smith_action_assiale.print_summary()
+    smith_action_assiale.print_summary()
     
-    # 3b. Interpola deflessioni tra 60 e 80
-    smith_action_assiale.add_interpolated_deflection_curves(defl_a=60, defl_b=80, step=1)'''
+
 
     # 4. Carica dataset
     BASE_DIR = Path(__file__).resolve().parents[2]
     DATASET_PATH = BASE_DIR / "Data" / "database.dat"
     df = pd.read_csv(DATASET_PATH)
 
-    # 5. Plotta il diagramma
-    '''fig, ax = smith_action_assiale.plot(
-        figsize=(12, 9),
-        save_path="smith_diagram_action_assiale_with_dataset.png"
-    )'''
+
 
     # 6. Scatter dataset
     phi = df['OF_phi_OP_01'].values
     psi = df['OF_psi_OP_01'].values
     csi = df['OF_CSI_OP_01'].values
+    cpt = df['OF_Cpt_OP_01'].values
 
-    '''scatter = ax.scatter(
-        phi, psi,
-        c=csi, cmap='RdYlGn_r',
-        s=50, alpha=0.6,
-        edgecolors='black', linewidth=0.5
+    fig, ax = smith_action_assiale.plot(
+        figsize=(13, 9),
+        scatter_data={
+            'phi'                  : phi,
+            'psi'                  : psi,
+            'values'               : csi,
+            'label'                : 'CSI  (perdite pressione statica)',
+            'cmap'                 : 'RdYlGn_r',   # verde=basso, rosso=alto
+            'percentile_highlight' : 10,            # evidenzia top/bottom 10%
+            'size'                 : 40,
+            'alpha'                : 0.75,
+        }
     )
-    cbar = plt.colorbar(scatter, ax=ax, label='CSI')
-    
+    ax.set_title("Smith Diagram Action — Total to total", fontsize=16, fontweight='bold')
     plt.tight_layout()
-    plt.show()'''
+    plt.show()
+
+    # -----------------------------------------------------------------------
+    # OPZIONE B — Due diagrammi affiancati: CSI e CPT a confronto
+    # -----------------------------------------------------------------------
+    fig2, axes2 = smith_action_assiale.plot_losses_comparison(
+        phi=phi, psi=psi, csi=csi, cpt=cpt,
+        figsize=(20, 9)
+    )
+    plt.show()
 
     # 7. Deflessione Smith + deflessioni reali (alfa e beta) stampate insieme
     nome_colonna_alfa = 'OF_alfa_ex_OP_01'

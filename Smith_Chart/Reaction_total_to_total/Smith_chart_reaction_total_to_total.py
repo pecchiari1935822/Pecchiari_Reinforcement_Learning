@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from pathlib import Path
+import matplotlib.colors as mcolors
 
 
 class SmithDiagram_Reaction_total_to_total:
@@ -422,49 +423,91 @@ class SmithDiagram_Reaction_total_to_total:
 
         return report
 
-    def build_single_deflection_curve(self, deflection_deg, defl_a=40, defl_b=140, n_points=250):
-        """
-        Costruisce SOLO la curva di deflessione 'deflection_deg' (anche non intera),
-        interpolando linearmente tra le curve note defl_a e defl_b.
+    def add_interpolated_efficiency_curves_by_blocks(self, step=0.5, n_points=600, overwrite=False, eta_range=None):
+        base_etas = sorted(self.efficiency_curves.keys())
+        if len(base_etas) < 2:
+            print("⚠️  Servono almeno 2 curve eta per interpolare.")
+            return
+        if eta_range is not None:
+            base_etas = [e for e in base_etas if eta_range[0] <= e <= eta_range[1]]
 
-        Risultato:
-          - self.deflection_curves contiene solo {round(deflection_deg): curve}
-          - self.interpolators contiene solo l'interpolatore di quella curva
-          - self.deflection_phi_domain aggiornato
-        """
-        if defl_a not in self.interpolators or defl_b not in self.interpolators:
-            raise ValueError(f"Servono {defl_a}° e {defl_b}° già caricate per costruire la curva singola.")
+        if not hasattr(self, 'interpolated_efficiency_curves'):
+            self.interpolated_efficiency_curves = {}
 
-        a_min, a_max = self.deflection_phi_domain[defl_a]
-        b_min, b_max = self.deflection_phi_domain[defl_b]
-        phi_min = max(a_min, b_min)
-        phi_max = min(a_max, b_max)
-        if phi_max <= phi_min:
-            raise ValueError(f"Nessun range di φ in comune tra {defl_a}° e {defl_b}°.")
+        def arc_length_param(pts):
+            diffs = np.diff(pts, axis=0)
+            seg_lengths = np.sqrt((diffs ** 2).sum(axis=1))
+            arc = np.concatenate([[0], np.cumsum(seg_lengths)])
+            arc /= arc[-1]
+            return arc
 
-        phi_grid = np.linspace(phi_min, phi_max, n_points)
+        def is_closed(pts, threshold=0.3):
+            """Curva chiusa se il primo e l'ultimo punto sono vicini."""
+            return np.linalg.norm(pts[0] - pts[-1]) < threshold
 
-        psi_a = self.interpolators[defl_a](phi_grid)
-        psi_b = self.interpolators[defl_b](phi_grid)
+        def clean(pts):
+            pts = self._sort_curve_points(pts)
+            return pts[~np.isnan(pts).any(axis=1)]
 
-        t = (deflection_deg - defl_a) / (defl_b - defl_a)
-        psi_new = (1 - t) * psi_a + t * psi_b
+        print(f"\n📊 Interpolazione isorendimento tra: {base_etas}")
+        print("=" * 70)
 
-        curve_new = np.column_stack([phi_grid, psi_new])
+        for i in range(len(base_etas) - 1):
+            eta_a = base_etas[i]
+            eta_b = base_etas[i + 1]
+            print(f"\n🔗 BLOCCO: {eta_a} → {eta_b}")
 
-        # etichetta: usa l'intero più vicino (serve per highlight_deflection e legenda coerente)
-        defl_label = int(round(deflection_deg))
+            pts_a = clean(self.efficiency_curves[eta_a])
+            pts_b = clean(self.efficiency_curves[eta_b])
 
-        # IMPORTANTISSIMO: svuota tutto e lascia solo la curva stimata
-        self.deflection_curves[defl_label] = curve_new
-        self.deflection_phi_domain[defl_label] = (phi_min, phi_max)
-        self.interpolators[defl_label] = interp1d(
-            phi_grid, psi_new, kind="cubic", bounds_error=False, fill_value="extrapolate"
-        )
+            closed_a = is_closed(pts_a)
+            closed_b = is_closed(pts_b)
 
-        return defl_label
+            print(f"   eta_{eta_a}: {'chiusa' if closed_a else 'aperta'} ({len(pts_a)} punti)")
+            print(f"   eta_{eta_b}: {'chiusa' if closed_b else 'aperta'} ({len(pts_b)} punti)")
 
-    def plot(self, figsize=(12, 9), save_path=None, target_point=None, highlight_deflection=None):
+            # Non interpolare tra aperta e chiusa: topologia diversa
+            if closed_a != closed_b:
+                print(f"   ⚠️  Topologie diverse (aperta↔chiusa). Blocco saltato.")
+                continue
+
+            if closed_a and closed_b:
+                # Allinea i punti di partenza: entrambe partono dal punto con psi minima
+                pts_a = np.roll(pts_a, -np.argmin(pts_a[:, 1]), axis=0)
+                pts_b = np.roll(pts_b, -np.argmin(pts_b[:, 1]), axis=0)
+            # Se entrambe aperte, lasciale così come sono (già ordinate dal _sort)
+
+            t_a = arc_length_param(pts_a)
+            t_b = arc_length_param(pts_b)
+            t_grid = np.linspace(0, 1, n_points)
+
+            phi_a_grid = np.interp(t_grid, t_a, pts_a[:, 0])
+            psi_a_grid = np.interp(t_grid, t_a, pts_a[:, 1])
+            phi_b_grid = np.interp(t_grid, t_b, pts_b[:, 0])
+            psi_b_grid = np.interp(t_grid, t_b, pts_b[:, 1])
+
+            eta_new = round(eta_a + step, 9)
+            curves_created = []
+            while eta_new < eta_b - 1e-9:
+                if eta_new not in self.interpolated_efficiency_curves or overwrite:
+                    t = (eta_new - eta_a) / (eta_b - eta_a)
+                    phi_new = (1 - t) * phi_a_grid + t * phi_b_grid
+                    psi_new = (1 - t) * psi_a_grid + t * psi_b_grid
+                    self.interpolated_efficiency_curves[round(eta_new, 4)] = np.column_stack([phi_new, psi_new])
+                    curves_created.append(round(eta_new, 4))
+                eta_new = round(eta_new + step, 9)
+
+            if curves_created:
+                print(f"   ✓ Create: {curves_created}")
+            else:
+                print(f"   (nessuna nuova curva)")
+
+        print("\n" + "=" * 70)
+        print("✓ Interpolazione isorendimento completata!")
+        print("=" * 70 + "\n")
+
+    def plot(self, figsize=(12, 9), save_path=None, target_point=None, highlight_deflection=None, scatter_data=None,
+             show_interpolated_efficiency=False, show_interpolated_deflection=True):
         """
         Plotta il diagramma di Smith.
         Regole:
@@ -548,11 +591,13 @@ class SmithDiagram_Reaction_total_to_total:
         # ----------------------------
         # 2) PLOT CURVE EXTRA (interpolate singole)
         # ----------------------------
-        extra_defs = sorted(set(self.deflection_curves.keys()) - set(self.base_deflections))
-        for deflection in extra_defs:
-            points = self.deflection_curves[deflection]
-            is_highlight = (highlight_deflection is not None and deflection == highlight_deflection)
-            _plot_one_curve(deflection, points, is_highlight=is_highlight, is_base=False)
+        # 2) Curve interpolate extra (deflessione)
+        if show_interpolated_deflection:
+            extra_defs = sorted(set(self.deflection_curves.keys()) - set(self.base_deflections))
+            for deflection in extra_defs:
+                points = self.deflection_curves[deflection]
+                is_highlight = (highlight_deflection is not None and deflection == highlight_deflection)
+                _plot_one_curve(deflection, points, is_highlight=is_highlight, is_base=False)
 
         # ----------------------------
         # 3) Curve di efficienza
@@ -573,6 +618,14 @@ class SmithDiagram_Reaction_total_to_total:
                     zorder=6
                 )
 
+        if show_interpolated_efficiency and hasattr(self, 'interpolated_efficiency_curves'):
+            for eta, points in sorted(self.interpolated_efficiency_curves.items()):
+                points_sorted = self._sort_curve_points(points)
+                ax.plot(points_sorted[:, 0], points_sorted[:, 1],
+                        color='gray', linestyle=':', linewidth=1.0, alpha=0.5, zorder=1)
+                valid_points = points_sorted[~np.isnan(points_sorted[:, 0])]
+
+
         # ----------------------------
         # 4) Punto target OP
         # ----------------------------
@@ -590,12 +643,48 @@ class SmithDiagram_Reaction_total_to_total:
                 zorder=10
             )
 
+        # 4) Scatter dataset
+        if scatter_data is not None:
+
+            phi_s = np.asarray(scatter_data['phi'])
+            psi_s = np.asarray(scatter_data['psi'])
+            vals = np.asarray(scatter_data['values'])
+            lbl = scatter_data.get('label', 'Losses')
+            cmap = scatter_data.get('cmap', 'RdYlGn_r')
+            pct = scatter_data.get('percentile_highlight', 10)
+            sz = scatter_data.get('size', 40)
+            alpha = scatter_data.get('alpha', 0.75)
+
+            vmin, vmax = np.nanpercentile(vals, 2), np.nanpercentile(vals, 98)
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+            scatter = ax.scatter(phi_s, psi_s, c=vals, cmap=cmap, norm=norm,
+                                 s=sz, alpha=alpha, edgecolors='black', linewidths=0.4, zorder=8)
+            cbar = plt.colorbar(scatter, ax=ax, pad=0.02)
+            cbar.set_label(lbl, fontsize=13, fontweight='bold')
+            cbar.ax.tick_params(labelsize=11)
+
+            if pct is not None and pct > 0:
+                thr_low = np.nanpercentile(vals, pct)
+                thr_high = np.nanpercentile(vals, 100 - pct)
+                mask_best = vals <= thr_low
+                mask_worst = vals >= thr_high
+
+                ax.scatter(phi_s[mask_best], psi_s[mask_best],
+                           c=vals[mask_best], cmap=cmap, norm=norm,
+                           s=sz * 1.8, edgecolors='lime', linewidths=1.8, zorder=9,
+                           label=f'Migliori {pct}% ({lbl} basso)')
+                ax.scatter(phi_s[mask_worst], psi_s[mask_worst],
+                           c=vals[mask_worst], cmap=cmap, norm=norm,
+                           s=sz * 1.8, edgecolors='darkred', linewidths=1.8, zorder=9,
+                           label=f'Peggiori {pct}% ({lbl} alto)')
+
         # ----------------------------
         # 5) Formattazione
         # ----------------------------
         ax.set_xlabel("Flow coefficient, φ", fontsize=16, fontweight="bold")
         ax.set_ylabel("Stage loading coefficient, ψ", fontsize=16, fontweight="bold")
-        ax.set_title("Smith Diagram Action - uscita assiale", fontsize=16, fontweight="bold")
+        ax.set_title("Smith Diagram Reaction - Total to total", fontsize=16, fontweight="bold")
 
         handles, labels = ax.get_legend_handles_labels()
         if labels:
@@ -608,6 +697,7 @@ class SmithDiagram_Reaction_total_to_total:
         ax.set_xlim(0, 1.5)
         ax.set_ylim(0, 3)
 
+
         plt.tight_layout()
 
         if save_path:
@@ -615,6 +705,103 @@ class SmithDiagram_Reaction_total_to_total:
             print(f"✓ Grafico salvato: {save_path}")
 
         return fig, ax
+
+    def plot_losses_comparison(self, phi, psi, csi, cpt, figsize=(18, 8), save_path=None):
+        """
+        Crea due diagrammi di Smith affiancati:
+          - Sinistra: scatter colorato per CSI (perdite di pressione statica)
+          - Destra:   scatter colorato per CPT (perdite di pressione totale)
+
+        Utile per confrontare come le due misure di perdita si distribuiscono
+        sullo stesso spazio (phi, psi).
+        """
+        fig, axes = plt.subplots(1, 2, figsize=figsize, sharey=True)
+
+        datasets = [
+            {'values': csi, 'label': 'CSI  (perdite pressione statica)', 'ax': axes[0]},
+            {'values': cpt, 'label': 'CPT  (perdite pressione totale)', 'ax': axes[1]},
+        ]
+
+        phi = np.asarray(phi)
+        psi = np.asarray(psi)
+
+        bbox_props = dict(boxstyle="round,pad=0.2", fc="white", ec="none", alpha=0.85)
+
+        for item in datasets:
+            ax = item['ax']
+            vals = np.asarray(item['values'])
+            lbl = item['label']
+
+            # --- sfondo diagramma di Smith ---
+            for deflection in sorted(self.base_deflections):
+                if deflection not in self.deflection_curves:
+                    continue
+                pts = self.deflection_curves[deflection]
+                pts = pts[np.argsort(pts[:, 0])]
+                ax.plot(pts[:, 0], pts[:, 1], color='black', linestyle='--',
+                        linewidth=1.4, alpha=0.4, zorder=1)
+                if len(pts) > 0:
+                    idx = len(pts) // 4
+                    ax.text(pts[idx, 0], pts[idx, 1], f"{deflection}°",
+                            fontsize=11, fontweight="bold", color='black',
+                            ha="center", va="center", bbox=bbox_props, zorder=5)
+
+            for efficiency, points in sorted(self.efficiency_curves.items()):
+                points_sorted = self._sort_curve_points(points)
+                ax.plot(points_sorted[:, 0], points_sorted[:, 1], 'k--',
+                        linewidth=2.0, alpha=0.5, zorder=1)
+                valid_points = points_sorted[~np.isnan(points_sorted[:, 0])]
+                if len(valid_points) > 0:
+                    ax.text(valid_points[-1, 0], valid_points[-1, 1],
+                            f"  η={efficiency:.2f}", fontsize=11,
+                            verticalalignment="center_baseline",
+                            horizontalalignment="center", zorder=6)
+
+            # --- scatter ---
+            vmin = np.nanpercentile(vals, 2)
+            vmax = np.nanpercentile(vals, 98)
+            norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+            sc = ax.scatter(phi, psi, c=vals, cmap='RdYlGn_r', norm=norm,
+                            s=35, alpha=0.75, edgecolors='black', linewidths=0.35, zorder=8)
+
+            cbar = plt.colorbar(sc, ax=ax, pad=0.02)
+            cbar.set_label(lbl.split('(')[0].strip(), fontsize=12, fontweight='bold')
+            cbar.ax.tick_params(labelsize=10)
+
+            # Evidenzia migliori (verde lime) e peggiori (rosso scuro) — top/bottom 10%
+            thr_low = np.nanpercentile(vals, 10)
+            thr_high = np.nanpercentile(vals, 90)
+            mask_best = vals <= thr_low
+            mask_worst = vals >= thr_high
+
+            ax.scatter(phi[mask_best], psi[mask_best],
+                       c=vals[mask_best], cmap='RdYlGn_r', norm=norm,
+                       s=60, edgecolors='lime', linewidths=1.8, zorder=9,
+                       label='Migliori 10%')
+            ax.scatter(phi[mask_worst], psi[mask_worst],
+                       c=vals[mask_worst], cmap='RdYlGn_r', norm=norm,
+                       s=60, edgecolors='darkred', linewidths=1.8, zorder=9,
+                       label='Peggiori 10%')
+
+            ax.set_xlabel("Flow coefficient, φ", fontsize=14, fontweight="bold")
+            ax.set_ylabel("Stage loading coefficient, ψ", fontsize=14, fontweight="bold")
+            ax.set_title(lbl, fontsize=13, fontweight="bold")
+            ax.legend(loc='upper left', fontsize=10, framealpha=0.9)
+            ax.grid(True, alpha=0.3)
+            ax.tick_params(axis="both", which="major", labelsize=12)
+            ax.set_xlim(0, 1.5)
+            ax.set_ylim(0, 3)
+
+        fig.suptitle("Distribuzione delle perdite sul Diagramma di Smith",
+                     fontsize=15, fontweight='bold', y=1.01)
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches="tight")
+            print(f"✓ Grafico salvato: {save_path}")
+
+        return fig, axes
 
     def find_intersection(self, efficiency_target, deflection_target):
         """
@@ -687,13 +874,17 @@ if __name__ == "__main__":
     )
 
     # Valida
-    validation_report = smith_reaction_total_to_total.validate_interpolation(
+    '''validation_report = smith_reaction_total_to_total.validate_interpolation(
         defl_min=60, defl_max=80, tolerance_psi=0.03
-    )
+    )'''
 
-    # Plot
-    fig, ax = smith_reaction_total_to_total.plot(figsize=(12, 9))
-    plt.show()
+    smith_reaction_total_to_total.add_interpolated_efficiency_curves_by_blocks(
+        step=0.2, eta_range=(88, 92))
+
+    # Plot del diagramma di Smith senza tutto ti dataset
+    fig, ax = smith_reaction_total_to_total.plot(figsize=(12, 9), show_interpolated_efficiency=True,
+                                                 show_interpolated_deflection=False)
+
 
     # 3. Stampa riepilogo
     smith_reaction_total_to_total.print_summary()
@@ -715,6 +906,8 @@ if __name__ == "__main__":
     phi = df['OF_phi_OP_01'].values
     psi = df['OF_psi_OP_01'].values
     csi = df['OF_CSI_OP_01'].values
+    cpt = df['OF_Cpt_OP_01'].values
+    loss_tot = csi+cpt
 
     nome_colonna_alfa = 'OF_alfa_ex_OP_01'
     nome_beta1 = 'DOF_BETA1_GEOM_'
@@ -724,16 +917,83 @@ if __name__ == "__main__":
     beta1 = df[nome_beta1].values
     beta2 = df[nome_beta2].values
 
-    '''scatter = ax.scatter(
-        phi, psi,
-        c=csi, cmap='RdYlGn_r',
-        s=50, alpha=0.6,
-        edgecolors='black', linewidth=0.5
+
+    # Plot del diagramma di Smith con tutto il dataset per vedere se al ridursi di CSi aumenta l'efficienza
+    fig, ax = smith_reaction_total_to_total.plot(
+        figsize=(13, 9),show_interpolated_efficiency=True,show_interpolated_deflection=False,
+        scatter_data={
+            'phi'                  : phi,
+            'psi'                  : psi,
+            'values'               : csi,
+            'label'                : 'CSI  (perdite pressione statica)',
+            'cmap'                 : 'RdYlGn_r',   # verde=basso, rosso=alto
+            'percentile_highlight' : 10,            # evidenzia top/bottom 10%
+            'size'                 : 40,
+            'alpha'                : 0.75,
+        }
     )
-    
-    cbar = plt.colorbar(scatter, ax=ax, label='CSI')
-    
-    plt.tight_layout()'''
+    ax.set_title("Smith Diagram Reaction — Total to total", fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+    # -----------------------------------------------------------------------
+    # OPZIONE B — Due diagrammi affiancati: CSI e CPT a confronto
+    # -----------------------------------------------------------------------
+    fig2, axes2 = smith_reaction_total_to_total.plot_losses_comparison(
+        phi=phi, psi=psi, csi=csi, cpt=cpt,
+        figsize=(20, 9)
+    )
+    plt.show()
+
+    # --- 10 profili random sul diagramma di Smith ---
+    import matplotlib.colors as mcolors
+    import matplotlib.cm as cm
+
+    np.random.seed(42)
+    indices = np.random.choice(len(df), size=10, replace=False)
+
+    smith_reaction_total_to_total.add_interpolated_efficiency_curves_by_blocks(
+        step=0.05, eta_range=(88, 92))
+
+    fig2, ax2 = smith_reaction_total_to_total.plot(figsize=(13, 9),show_interpolated_efficiency=True, show_interpolated_deflection=True)
+
+    cmap_10 = cm.get_cmap('tab10')  # 10 colori distinti
+
+    for k, i in enumerate(indices):
+        phi_i = float(phi[i])
+        psi_i = float(psi[i])
+        alfa_ex_i = float(df['OF_alfa_ex_OP_01'].values[i])
+        defl_reale = 10.0 - alfa_ex_i  # alfa_in fisso = 10
+
+        color = cmap_10(k)
+
+        # Deflessione stimata da Smith
+        d_smith = smith_reaction_total_to_total.estimate_deflection_nearest_integer(
+            phi_i, psi_i, defl_min=40, defl_max=140
+        )
+
+        # Evidenzia la curva di deflessione corrispondente
+        if d_smith is not None and d_smith in smith_reaction_total_to_total.deflection_curves:
+            pts = smith_reaction_total_to_total.deflection_curves[d_smith]
+            pts = pts[np.argsort(pts[:, 0])]
+            ax2.plot(pts[:, 0], pts[:, 1],
+                     color=color, linestyle='-', linewidth=2.2,
+                     alpha=0.85, zorder=3)
+
+        # Punto
+        ax2.scatter(phi_i, psi_i,
+                    color=color, s=150,
+                    edgecolors='black', linewidths=1.0,
+                    zorder=10,
+                    label=f'#{i}  |  δ_reale={defl_reale:.1f}°  |  δ_Smith={d_smith}°  |  loss={float(loss_tot[i]):.4f}')
+
+    ax2.set_title("Smith Diagram — 10 profili casuali", fontsize=14, fontweight='bold')
+    ax2.legend(loc='upper right', fontsize=12, framealpha=0.9, title='#riga  |  Deflessione reale  |  Deflessione Smith  |  CSI')
+    margin = 0.15
+    ax2.set_xlim(phi[indices].min() - margin, phi[indices].max() + margin)
+    ax2.set_ylim(psi[indices].min() - margin, psi[indices].max() + margin)
+
+    plt.tight_layout()
     plt.show()
 
     # 7. Stima e stampa la deflessione per ogni profilo del dataset (intero più vicino)

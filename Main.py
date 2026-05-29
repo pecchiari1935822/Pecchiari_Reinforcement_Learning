@@ -359,7 +359,7 @@ def task_2(use_delta):
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    task_1(True)
+    #task_1(True)
     #task_1(False)
     task_2(True)
     #task_2(False)
