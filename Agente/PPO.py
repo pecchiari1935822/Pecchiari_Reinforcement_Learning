@@ -9,7 +9,7 @@ import shutil
 import glob
 from Ambiente.Ambiente import BladeOptimEnv
 from Config.Set_input_param import PPO_PARAMS, \
-    TOTAL_TIMESTEPS, n_dof_totali, target_phi, target_psi, DOF_NAMES_ALL, OF_NAMES, ACTIVE_DOF_INDICES
+    TOTAL_TIMESTEPS, n_dof_totali, target_phi, target_psi, DOF_NAMES_ALL, OF_NAMES, ACTIVE_DOF_INDICES, early_stopping
 from Report.Plot import _plot_results, _plot_training_metrics_actor, _plot_training_metrics_critic, _plot_dof_evolution, _plot_dof_evolution_barre
 
 
@@ -34,9 +34,11 @@ class BladeCallback(BaseCallback):
 
         # Early stopping
         if episode_length == 20:
-            self.patience = 4000  # numero di step senza miglioramento prima di fermare
-        if episode_length == 40:
+            self.patience = 75000  # numero di step senza miglioramento prima di fermare
+        elif episode_length == 40:
                 self.patience = 12000
+        else:
+            self.patience = None
         self.steps_senza_miglioramenti = 0
 
         # Metriche episodio
@@ -148,7 +150,7 @@ class BladeCallback(BaseCallback):
                 self.best_dof_ep = None
 
 
-        '''if self.start_dof is not None:
+        if self.start_dof is not None and early_stopping == True:
             if self.steps_senza_miglioramenti >= self.patience:
                     print(f"\n[Early Stopping] Nessun miglioramento del CSI per {self.patience} step. Interruzione.")
                     return False  # Questo ferma il PPO!'''
@@ -242,7 +244,7 @@ def train(surrogate_fn,
 
     env = Monitor(env_raw, filename="./ppo_blade_monitor")
 
-    cb_blade = BladeCallback(verbose=0, start_dof=start_dof)
+    cb_blade = BladeCallback(verbose=0, start_dof=start_dof, episode_length=episode_length)
     cb_ckpt = CheckpointCallback(
         save_freq=10000, save_path="./ppo_blade_checkpoints/",
         name_prefix="ppo_blade", verbose=1,
@@ -356,7 +358,7 @@ def pulisci_file_temporanei():
     immagini = ["plot_results.png", "plot_metrics_actor.png", "plot_metrics_critic.png","plot_dof_evolution_barre.png",
                 "plot_dof_evolution.png", "smith_diagram_action_assiale.png",
                 "smith_diagram_action_total_to_total.png",
-                "smith_diagram_reaction_total_to_total.png"
+                "smith_diagram_reaction_total_to_total.png","smith_diagram_reaction_ZOOM.png"
                 ]
     for img in immagini:
         if os.path.exists(img):

@@ -195,12 +195,11 @@ def compute_reward(of_current, of_previous, of_start, tolleranza=None):
 
     penalty = 0.0
     if errore_psi > tolleranza:
-        # Moltiplicatore da calibrare (es. 10.0) in modo che la penalità
-        # superi il guadagno del delta CSI
-        penalty += 10.0 * (errore_psi - tolleranza)
+        # Penalità quadratica: se sgarri di poco, la penalità è minima. Se sgarri di tanto, esplode.
+        penalty += 50.0 * ((errore_psi - tolleranza) ** 2)
 
     if errore_phi > tolleranza:
-        penalty += 10.0 * (errore_phi - tolleranza)
+        penalty += 50.0 * ((errore_phi - tolleranza) ** 2)
 
     reward_csi = float(csi_prev - csi_curr)
 
@@ -216,7 +215,6 @@ def compute_reward_target(
     phi_target,
     psi_target,
     tol_rel=0.01,
-    penalty_k=10.0,
     invalid_penalty=-10.0
 ):
     """
@@ -240,9 +238,9 @@ def compute_reward_target(
 
     penalty = 0.0
     if e_phi > tol_rel:
-        penalty += penalty_k * (e_phi - tol_rel)
+        penalty += 50.0 * ((e_phi - tol_rel)**2)
     if e_psi > tol_rel:
-        penalty += penalty_k * (e_psi - tol_rel)
+        penalty += 50.0 * ((e_psi - tol_rel)**2)
 
     reward_csi = csi_prev - csi_curr
     return float(reward_csi - penalty)
@@ -303,7 +301,7 @@ class BladeOptimEnv(gym.Env):
         # DOF attivi normalizzati [0,1] + tutti i 15 OF
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
-            shape=(n_active_dof + n_of+2,),
+            shape=(n_active_dof + n_of+4,),
             dtype=np.float32
         )
 
@@ -320,16 +318,32 @@ class BladeOptimEnv(gym.Env):
         La normalizzazione aiuta la rete PPO a lavorare su scale comparabili.
         """
         dof_norm = (dof_active - self.dof_low) / (self.dof_range + 1e-8)
-        if self.start_of is not None:
-            target_psi = self.start_of[IDX_PSI]
-            target_phi = self.start_of[IDX_PHI]
+
+        # 1. Identifichiamo i target corretti (coerentemente con le condizioni usate nel metodo step)
+        if (self.target_phi is not None) and (self.target_psi is not None):
+            target_phi_val = self.target_phi
+            target_psi_val = self.target_psi
+        elif self.start_of is not None:
+            target_phi_val = self.start_of[IDX_PHI]
+            target_psi_val = self.start_of[IDX_PSI]
         else:
-            target_psi = 0.0
-            target_phi = 0.0
+            target_phi_val = 0.0
+            target_psi_val = 0.0
 
-        target_array = np.array([target_psi, target_phi], dtype=np.float32)
+        target_array = np.array([target_psi_val, target_phi_val], dtype=np.float32)
 
-        return np.concatenate([dof_norm, of_vals, target_array]).astype(np.float32)
+        # 2. Calcoliamo gli errori relativi correnti basandoci su of_vals (i valori attuali della pala)
+        phi_curr = of_vals[IDX_PHI]
+        psi_curr = of_vals[IDX_PSI]
+
+        errore_psi = abs(psi_curr - target_psi_val) / (abs(target_psi_val) + 1e-8)
+        errore_phi = abs(phi_curr - target_phi_val) / (abs(target_phi_val) + 1e-8)
+
+        # Array con i due errori calcolati
+        error_array = np.array([errore_psi, errore_phi], dtype=np.float32)
+
+        # 3. Concateniamo tutto nel vettore finale (dimensione: n_active_dof + 15 + 2 + 2)
+        return np.concatenate([dof_norm, of_vals, target_array, error_array]).astype(np.float32)
 
     def _get_observation(self):
 
@@ -418,7 +432,7 @@ class BladeOptimEnv(gym.Env):
 
         else:
             # fallback: la tua reward attuale con vincoli su start_of
-            tolleranza_max = 0.05
+            tolleranza_max = 0.03
             reward_val = compute_reward(new_of, prev_of, self.ref_of, tolleranza=tolleranza_max)
             reward = float(np.squeeze(reward_val))
 

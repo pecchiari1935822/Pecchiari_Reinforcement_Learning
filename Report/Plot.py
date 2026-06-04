@@ -433,7 +433,7 @@ def _plot_training_metrics_critic(cb: 'BladeCallback',lr , n_step, save_path="pl
     return save_path
 
 
-def plot_smith(phi_ottimale, psi_ottimale, defl_min=40, defl_max=140, step=1, validate=True):
+def plot_smith(phi_ottimale, psi_ottimale, orig_phi, orig_psi, defl_min=40, defl_max=140, step=1, validate=True):
     """
     Plotta i diagrammi di Smith (Reaction T-T, Action Assiale, Action T-T).
 
@@ -467,6 +467,10 @@ def plot_smith(phi_ottimale, psi_ottimale, defl_min=40, defl_max=140, step=1, va
     # Stima deflessione
     d_hat = smith_reaction_total_to_total.estimate_deflection_nearest_integer(
         phi_ottimale, psi_ottimale, defl_min=defl_min, defl_max=defl_max
+    )
+
+    d_hat_orig = smith_reaction_total_to_total.estimate_deflection_nearest_integer(
+        orig_phi, orig_psi, defl_min=defl_min, defl_max=defl_max
     )
 
     # Plot
@@ -554,3 +558,69 @@ def plot_smith(phi_ottimale, psi_ottimale, defl_min=40, defl_max=140, step=1, va
             save_path="smith_diagram_action_total_to_total.png"
         )
 
+def plot_smith_zoom_reaction(phi_ottimale, psi_ottimale, orig_phi, orig_psi, defl_min=40, defl_max=140,
+                             step_deflection=1, step_efficiency=0.2, eta_range=(88, 96), zoom_margin=0.08):
+    """
+    Plotta SOLO il diagramma di Smith (Reaction T-T) ed esegue uno zoom attorno
+    ai due punti passati in ingresso. Vengono interpolate sia le curve di deflessione
+    che (nuovo!) le curve di isorendimento, in modo da avere una griglia densa su cui
+    confrontare visivamente i due punti.
+    """
+    BASE_DIR = Path(__file__).resolve().parents[1]
+
+    # 1. Caricamento e inizializzazione base
+    smith_zoom = SmithDiagram_Reaction_total_to_total(
+        BASE_DIR / "Smith_Chart" / "Reaction_total_to_total" / "csv"
+    )
+
+    # 2. Interpola le deflessioni (come fai già)
+    smith_zoom.add_interpolated_deflection_curves_by_blocks(
+        step=step_deflection,
+        n_points=600,
+        overwrite=False
+    )
+
+    # 3. Interpola le isorendimento (efficienza) per costruire un reticolo denso
+    # Utilizza il metodo add_interpolated_efficiency_curves_by_blocks che già possiedi
+    smith_zoom.add_interpolated_efficiency_curves_by_blocks(
+        step=step_efficiency,
+        eta_range=eta_range
+    )
+
+    # Stime della deflessione (per sapere se evidenziarne qualcuna, opzionale, non vitale)
+    d_hat_ott = smith_zoom.estimate_deflection_nearest_integer(phi_ottimale, psi_ottimale, defl_min=defl_min,
+                                                               defl_max=defl_max)
+
+    # 4. Chiama la funzione plot
+    # Forziamo show_interpolated_efficiency = True
+    fig, ax = smith_zoom.plot(
+        figsize=(12, 10),
+        target_point=(phi_ottimale, psi_ottimale),
+        orig_point=(orig_phi, orig_psi),
+        highlight_deflection=int(d_hat_ott) if d_hat_ott is not None else None,
+        show_interpolated_efficiency=True,  # <-- Questo farà apparire le nuove curve grigie interpolate
+        show_interpolated_deflection=True  # <-- Plotta anche le deflessioni "mancanti" per fare reticolo
+    )
+
+    # 5. Effettua uno ZOOM (cambia i limiti deglis assi per fare il crop solo sull'area interessata)
+    min_phi = min(phi_ottimale, orig_phi)
+    max_phi = max(phi_ottimale, orig_phi)
+
+    min_psi = min(psi_ottimale, orig_psi)
+    max_psi = max(psi_ottimale, orig_psi)
+
+    # Aggiungi un piccolo margine per non far collidere i punti con i bordi del grafico
+    ax.set_xlim(min_phi - zoom_margin, max_phi + zoom_margin)
+    ax.set_ylim(min_psi - zoom_margin, max_psi + zoom_margin)
+
+    ax.set_title("Zoom In - Confronto Punti Operativi\n(Interpolazione Deflessioni e Isorendimento)", fontsize=14,
+                 fontweight="bold")
+
+    save_path = "smith_diagram_reaction_ZOOM.png"
+    # Facoltativo ma utile: forza prima un tight_layout di matplotlib puro
+    fig.tight_layout()
+    # SALVA SENZA BBOX_INCHES TIGHT per non innescare il calcolo infinito dello spazio bianco
+    fig.savefig(save_path, dpi=120)
+    plt.close(fig)
+
+    return save_path

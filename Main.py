@@ -8,7 +8,8 @@ from Config.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_
 from Agente.PPO import train, pulisci_file_temporanei
 from Ambiente.Ambiente import load_surrogate, SURROGATE_MODEL_PATH, SCALER_PATH
 from Report.Presentazione import aggiungi_slide_iterazione, slide_iniziali_task_1, slide_iniziali_task_2, aggiungi_smith
-from Report.Plot import plot_smith
+from Report.Plot import plot_smith, plot_smith_zoom_reaction
+
 
 # ==========================================
 # TASK 1: Partenza casuale
@@ -192,6 +193,13 @@ def task_2(use_delta):
     df.columns = df.columns.str.replace("_BC_", "", regex=False)
 
     for row_idx in ROW_INDEX:
+
+        if os.path.exists(TEMPLATE_PATH):
+            print(f"Caricamento template da: {TEMPLATE_PATH}")
+            prs = Presentation(TEMPLATE_PATH)
+        else:
+            prs = Presentation()
+
         print(f"\nLettura dataset: {DATASET_PATH}")
         print(f"Estrazione riga numero: {row_idx}")
 
@@ -298,16 +306,23 @@ def task_2(use_delta):
                     beta_1_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA1")])
                     beta_2_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA2")])
 
+                    orig_phi = float(start_of_originali[OF_NAMES.index("OF_phi")])
+                    orig_psi = float(start_of_originali[OF_NAMES.index("OF_psi")])
+
 
 
                     plot_smith(
                         phi_ottimale=phi_ottimale,
                         psi_ottimale=psi_ottimale,
+                        orig_phi=orig_phi,
+                        orig_psi=orig_psi,
                         defl_min=40,
                         defl_max=140,
                         step=1,  # ← Interpola ogni 1°
                         validate=True
                     )
+
+                    plot_smith_zoom_reaction(phi_ottimale, psi_ottimale, orig_phi, orig_psi)
 
                     # 6. Confronto Finale PPO vs Dataset
                     miglioramento = csi_originale - best_csi

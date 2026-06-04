@@ -506,7 +506,7 @@ class SmithDiagram_Reaction_total_to_total:
         print("✓ Interpolazione isorendimento completata!")
         print("=" * 70 + "\n")
 
-    def plot(self, figsize=(12, 9), save_path=None, target_point=None, highlight_deflection=None, scatter_data=None,
+    def plot(self, figsize=(12, 9), save_path=None, target_point=None, orig_point=None, highlight_deflection=None, scatter_data=None,
              show_interpolated_efficiency=False, show_interpolated_deflection=True):
         """
         Plotta il diagramma di Smith.
@@ -632,14 +632,34 @@ class SmithDiagram_Reaction_total_to_total:
         if target_point is not None:
             phi_p, psi_p = target_point
             ax.plot(
-                phi_p, psi_p, marker="*", color="blue",
-                markersize=14, markeredgecolor="black", zorder=10
+                phi_p, psi_p, marker="*", color="red",  # colore diverso!
+                markersize=14, markeredgecolor="black", zorder=10, label="Punto Ottimizzato"
             )
-            ax.text(
-                phi_p + 0.03, psi_p + 0.03,
-                f"OP\n({phi_p:.2f}, {psi_p:.2f})",
-                color="blue", fontsize=13, fontweight="bold",
+            ax.annotate(
+                f"Ottimo\n({phi_p:.3f}, {psi_p:.3f})",
+                xy=(phi_p, psi_p),
+                xytext=(15, 15),  # 15 punti in alto a destra
+                textcoords="offset points",
+                color="red", fontsize=12, fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", alpha=0.9),
+                arrowprops=dict(arrowstyle="->", color="red", lw=1.5),
+                zorder=10
+            )
+
+        if orig_point is not None:
+            orig_phi, orig_psi = orig_point
+            ax.plot(
+                orig_phi, orig_psi, marker="o", color="blue",  # colore e marker diverso
+                markersize=10, markeredgecolor="black", zorder=10, label="Punto Originale"
+            )
+            ax.annotate(
+                f"Originale\n({orig_phi:.3f}, {orig_psi:.3f})",
+                xy=(orig_phi, orig_psi),
+                xytext=(-15, -35),  # 15 punti a sinistra, 35 in basso (così non si incrociano)
+                textcoords="offset points",
+                color="blue", fontsize=12, fontweight="bold",
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="blue", alpha=0.9),
+                arrowprops=dict(arrowstyle="->", color="blue", lw=1.5),
                 zorder=10
             )
 
