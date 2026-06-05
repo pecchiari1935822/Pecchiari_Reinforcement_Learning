@@ -2,7 +2,7 @@
 TOTAL_TIMESTEPS = 200_000
 learning_rate = [0.00003]
 n_steps = [200]
-early_stopping = True
+early_stopping = None
 
 # Azione che viene fatta dall'attore che interagisce con l'ambiente
 ACTION_SCALE   = 0.05
@@ -20,7 +20,7 @@ PPO_PARAMS = dict(
 )
 
 # Cosa si vuole ottimizzare (quali DOF) e in quale riga del file di input
-ROW_INDEX = [909]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
+ROW_INDEX = [3,158,456,710,909]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
 
 DOF_BOUNDS_ALL = [
     (0.084,   0.140),    # DOF_PITCH_GEOM
