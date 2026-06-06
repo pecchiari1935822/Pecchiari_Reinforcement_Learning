@@ -18,6 +18,7 @@ def task_1(use_delta):
 
     use_delta = use_delta
     episode_length = 60
+    task_1 = True
 
     prs = Presentation()
     DATABASE_DIR = Path(__file__).parent.resolve()
@@ -38,6 +39,7 @@ def task_1(use_delta):
         print(f"  ⚠️  Errore nell'aggiunta slide iniali: {e}")
 
     surrogate_fn = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
+
 
     # Loop su learning_rate e n_steps
     for lr in learning_rate:
@@ -60,7 +62,7 @@ def task_1(use_delta):
                 start_dof=None,  # ← CASUALE
                 learning_rate=lr,
                 n_steps=n_step,
-                batch_size=batch_size, use_delta =use_delta, episode_length=episode_length
+                batch_size=batch_size, use_delta =use_delta, episode_length=episode_length, task1=task_1
             )
 
             if best_of is None:
@@ -74,6 +76,8 @@ def task_1(use_delta):
             alpha_in_ottimale = 10
             beta_1_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA1")])
             beta_2_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA2")])
+
+
 
             plot_smith(
                 phi_ottimale=phi_ottimale,
@@ -125,7 +129,7 @@ def task_1(use_delta):
             except Exception as e:
                 print(f"  ⚠️  Errore nell'aggiunta slide: {e}")
 
-            aggiungi_smith(prs)
+            aggiungi_smith(prs, task1=task_1)
             # Salva risultati
             results.append({
                 'learning_rate': lr,
@@ -314,8 +318,6 @@ def task_2(use_delta):
                     plot_smith(
                         phi_ottimale=phi_ottimale,
                         psi_ottimale=psi_ottimale,
-                        orig_phi=orig_phi,
-                        orig_psi=orig_psi,
                         defl_min=40,
                         defl_max=140,
                         step=1,  # ← Interpola ogni 1°
@@ -363,7 +365,7 @@ def task_2(use_delta):
 
                     aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_dof_dataset, start_of_originali)
 
-                    aggiungi_smith(prs)
+                    aggiungi_smith(prs, task1=None)
 
         if use_delta == True:
             output_pptx = f"Task2_delta_riga{row_idx}.pptx"
@@ -374,7 +376,7 @@ def task_2(use_delta):
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    #task_1(True)
+    task_1(True)
     #task_1(False)
-    task_2(True)
+    #task_2(True)
     #task_2(False)

@@ -201,7 +201,9 @@ class BladeCallback(BaseCallback):
 
 def train(surrogate_fn,
           start_dof=None,
-          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta = True, episode_length=None, ref_of=None):
+          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta = True, episode_length=None, ref_of=None,
+          task1=None
+          ):
     print("=" * 60)
     print("  PPO Blade Optimization — Stable Baselines3")
     print(f"  DOF attivi: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}")
@@ -250,16 +252,30 @@ def train(surrogate_fn,
         name_prefix="ppo_blade", verbose=1,
     )
 
-    model = PPO(
-        policy="MlpPolicy", env=env,
-        policy_kwargs=dict(net_arch=dict(pi=[128, 128], vf=[128, 128])),
-        tensorboard_log=log_dir,
-        seed=42,
-        learning_rate=learning_rate,
-        n_steps=n_steps,
-        batch_size=batch_size,
-        **PPO_PARAMS
-    )
+    if task1 == True:
+        policy_kwargs = dict(
+            net_arch=dict(pi=[256, 256], vf=[256, 256]))
+        model = PPO(
+            policy="MlpPolicy", env=env,
+            policy_kwargs=policy_kwargs,
+            tensorboard_log=log_dir,
+            seed=42,
+            learning_rate=learning_rate,
+            n_steps=n_steps,
+            batch_size=batch_size,
+            **PPO_PARAMS
+        )
+    else:
+        model = PPO(
+            policy="MlpPolicy", env=env,
+            policy_kwargs=dict(net_arch=dict(pi=[128, 128], vf=[128, 128])),
+            tensorboard_log=log_dir,
+            seed=42,
+            learning_rate=learning_rate,
+            n_steps=n_steps,
+            batch_size=batch_size,
+            **PPO_PARAMS
+        )
 
     print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
     print("  (tensorboard --logdir ./ppo_blade_logs/)\n")

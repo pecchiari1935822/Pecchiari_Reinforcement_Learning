@@ -433,7 +433,7 @@ def _plot_training_metrics_critic(cb: 'BladeCallback',lr , n_step, save_path="pl
     return save_path
 
 
-def plot_smith(phi_ottimale, psi_ottimale, orig_phi, orig_psi, defl_min=40, defl_max=140, step=1, validate=True):
+def plot_smith(phi_ottimale, psi_ottimale, defl_min=40, defl_max=140, step=1, validate=True):
     """
     Plotta i diagrammi di Smith (Reaction T-T, Action Assiale, Action T-T).
 
@@ -469,9 +469,7 @@ def plot_smith(phi_ottimale, psi_ottimale, orig_phi, orig_psi, defl_min=40, defl
         phi_ottimale, psi_ottimale, defl_min=defl_min, defl_max=defl_max
     )
 
-    d_hat_orig = smith_reaction_total_to_total.estimate_deflection_nearest_integer(
-        orig_phi, orig_psi, defl_min=defl_min, defl_max=defl_max
-    )
+
 
     # Plot
     if d_hat is None:

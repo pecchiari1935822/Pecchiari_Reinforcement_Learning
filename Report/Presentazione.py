@@ -5,6 +5,7 @@ from Config.Set_input_param import PPO_PARAMS
 
 
 
+
 def slide_iniziali_task_1(prs):
     slide_layout_intro = prs.slide_layouts[0]
     slide_intro = prs.slides.add_slide(slide_layout_intro)
@@ -265,7 +266,7 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
                 p_of.level = 0
 
 
-def aggiungi_smith(prs):
+def aggiungi_smith(prs, task1):
     slide = prs.slides.add_slide(prs.slide_layouts[4])
     if slide.shapes.title:
         slide.shapes.title.text = "Smith Diagram Action - Axial exit"
@@ -286,9 +287,11 @@ def aggiungi_smith(prs):
     slide.shapes.add_picture("smith_diagram_reaction_total_to_total.png", Inches(2.2), Inches(1.2),
                              height=Inches(6.2))
 
-    # Slide 4: stesso di prima ma per confrontare il profilo di partenza con quello ottimizzato
-    slide = prs.slides.add_slide(prs.slide_layouts[4])
-    if slide.shapes.title:
-        slide.shapes.title.text = "Smith Diagram Reaction - Total to Total"
-    slide.shapes.add_picture("smith_diagram_reaction_ZOOM.png", Inches(2.2), Inches(1.2),
-                             height=Inches(6.2))
+
+    if task1 == None:
+        # Slide 4: stesso di prima ma per confrontare il profilo di partenza con quello ottimizzato
+        slide = prs.slides.add_slide(prs.slide_layouts[4])
+        if slide.shapes.title:
+            slide.shapes.title.text = "Smith Diagram Reaction - Total to Total"
+        slide.shapes.add_picture("smith_diagram_reaction_ZOOM.png", Inches(2.2), Inches(1.2),
+                                 height=Inches(6.2))

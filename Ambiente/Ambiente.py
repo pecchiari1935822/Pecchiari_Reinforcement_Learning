@@ -313,36 +313,26 @@ class BladeOptimEnv(gym.Env):
         self.step_count         = 0
 
     def _build_obs(self, dof_active, of_vals):
-        """
-        Osservazione = DOF attivi normalizzati in [0,1] + OF grezzi.
-        La normalizzazione aiuta la rete PPO a lavorare su scale comparabili.
-        """
         dof_norm = (dof_active - self.dof_low) / (self.dof_range + 1e-8)
 
-        # 1. Identifichiamo i target corretti (coerentemente con le condizioni usate nel metodo step)
         if (self.target_phi is not None) and (self.target_psi is not None):
             target_phi_val = self.target_phi
             target_psi_val = self.target_psi
-        elif self.start_of is not None:
-            target_phi_val = self.start_of[IDX_PHI]
-            target_psi_val = self.start_of[IDX_PSI]
         else:
-            target_phi_val = 0.0
-            target_psi_val = 0.0
+            # Usiamo self.ref_of così l'agente vede i vincoli del profilo corrente dell'episodio
+            target_phi_val = self.ref_of[IDX_PHI]
+            target_psi_val = self.ref_of[IDX_PSI]
 
         target_array = np.array([target_psi_val, target_phi_val], dtype=np.float32)
 
-        # 2. Calcoliamo gli errori relativi correnti basandoci su of_vals (i valori attuali della pala)
         phi_curr = of_vals[IDX_PHI]
         psi_curr = of_vals[IDX_PSI]
 
-        errore_psi = abs(psi_curr - target_psi_val) / (abs(target_psi_val) + 1e-8)
+        errore_psi = abs(psi_curr - target_phi_val) / (abs(target_phi_val) + 1e-8)
         errore_phi = abs(phi_curr - target_phi_val) / (abs(target_phi_val) + 1e-8)
 
-        # Array con i due errori calcolati
         error_array = np.array([errore_psi, errore_phi], dtype=np.float32)
 
-        # 3. Concateniamo tutto nel vettore finale (dimensione: n_active_dof + 15 + 2 + 2)
         return np.concatenate([dof_norm, of_vals, target_array, error_array]).astype(np.float32)
 
     def _get_observation(self):
@@ -353,26 +343,42 @@ class BladeOptimEnv(gym.Env):
     def reset(self, seed=None, options=None):
         """
         Reset Gymnasium-compliant con parametri seed e options.
+        Gestisce correttamente l'ancoraggio dei vincoli sia per profili fissi che casuali.
         """
         super().reset(seed=seed)
 
-        # Inizializza DOF e calcola OF
+        # 1. Inizializza i DOF (Grandi di Libertà)
         if self.start_dof is not None:
+            # Task 2: Parte dal profilo specifico richiesto
             self.current_dof_full = np.array(self.start_dof, dtype=np.float32)
         else:
+            # Task 1: Genera un profilo iniziale completamente casuale entro i bound fisici
             self.current_dof_full = self.np_random.uniform(
                 self.dof_low_all, self.dof_high_all
             ).astype(np.float32)
 
+        # Estrae solo i DOF attivi che l'agente può effettivamente modificare
         self.current_dof_active = self.current_dof_full[ACTIVE_DOF_INDICES].copy()
+
+        # Valuta le performance (OF) di questo profilo iniziale tramite il metamodello Keras
         self.current_of = self.predict(self.current_dof_full)
         self.start_of = self.current_of.copy()
         self.step_count = 0
 
-        if self.ref_of is None:
+        # 2. GESTIONE ANCORAGGIO VINCOLI (Risoluzione Bug Task 1)
+        if self.start_dof is None:
+            # TASK 1: Poiché la pala cambia ad ogni episodio, il punto di riferimento
+            # per i vincoli del 2% deve forzatamente resettarsi e ancorarsi alla nuova pala corrente.
             self.ref_of = self.start_of.copy()
+        else:
+            # TASK 2: Il profilo di partenza è fisso da database. Il vincolo del 2% si fissa
+            # una volta sola all'inizio e rimane lo stesso per tutti i cicli di addestramento.
+            if self.ref_of is None:
+                self.ref_of = self.start_of.copy()
 
+        # 3. Costruisce lo stato iniziale da passare all'agente (inclusi i nuovi errori relativi)
         obs = self._get_observation()
+
         return obs, {}
 
     def step(self, action):
@@ -432,7 +438,7 @@ class BladeOptimEnv(gym.Env):
 
         else:
             # fallback: la tua reward attuale con vincoli su start_of
-            tolleranza_max = 0.03
+            tolleranza_max = 0.005
             reward_val = compute_reward(new_of, prev_of, self.ref_of, tolleranza=tolleranza_max)
             reward = float(np.squeeze(reward_val))
 

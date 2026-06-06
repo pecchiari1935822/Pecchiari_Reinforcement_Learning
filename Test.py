@@ -4,8 +4,9 @@ import pandas as pd
 
 
 from stable_baselines3 import PPO
-from Ambiente.Ambiente import BladeOptimEnv, load_surrogate, DOF_BOUNDS_ALL
-from Agente.PPO import SURROGATE_MODEL_PATH, SCALER_PATH, Path
+from Ambiente.Ambiente import BladeOptimEnv, load_surrogate, DOF_BOUNDS_ALL, SURROGATE_MODEL_PATH, SCALER_PATH
+from pathlib import Path
+
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -77,14 +78,14 @@ if __name__ == "__main__":
     DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
 
     df = pd.read_csv(DATASET_PATH)
-    riga_nuova_idx = 710
+    riga_nuova_idx = 3
     riga_nuova = df.iloc[riga_nuova_idx].values
     DOF_profilo = riga_nuova[2:9].astype(np.float32).copy()
     OF_profilo = riga_nuova[9:24].astype(np.float32).copy()
     csi_nuovo_originale = float(riga_nuova[11])
 
-    modello_salvato = "ppo_task2_use_delta_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_riga[710]"
-    #modello_salvato = "ppo_task1_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_con_delta"
+    #modello_salvato = "ppo_task2_use_delta_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_riga[3]"
+    modello_salvato = "ppo_task1_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_con_delta"
 
     print(f"\nProfilo da ottimizzare (riga {riga_nuova_idx}):")
     print(f"\nDOF {DOF_profilo}")
@@ -97,45 +98,65 @@ if __name__ == "__main__":
     env = BladeOptimEnv(surrogate, start_dof=DOF_profilo, episode_length=40)
 
     obs, info = env.reset()
+
+    # Inizializza best_csi a infinito. Se l'agente non trova nulla di valido, rimarrà inf
     best_csi = np.inf
     best_dof = None
     best_of = None
-    steps_csi = []  # ← NUOVO: Salva CSI di ogni step
+    best_step = -1
+
+    steps_csi = []  # ← Salva CSI di ogni step per il plot
 
     print("\n  Inizio episodi di inferenza...")
     for step in range(40):
+        # deterministic=True è fondamentale in inferenza per rimuovere l'esplorazione casuale
         action, _states = model.predict(obs, deterministic=True)
         obs, reward, terminated, truncated, info = env.step(action)
 
         current_csi = info["csi"]
-        steps_csi.append(current_csi)  # ← NUOVO: Aggiungi alla lista
-        print(f"    Step {step + 1:02d} | CSI: {current_csi:.6f}")
+        is_valid = info.get("is_valid", False)  # Recupera il flag di validità
 
-        if current_csi < best_csi:
+        steps_csi.append(current_csi)
+
+        # Stampa visivamente se il profilo corrente rispetta phi e psi
+        valid_tag = "[✓ VALIDO]" if is_valid else "[x NON VALIDO]"
+        print(f"    Step {step + 1:02d} | CSI: {current_csi:.6f} {valid_tag} | Azione: {action}")
+
+        # SALVATAGGIO DEL MIGLIOR PROFILO: Solo se è valido!
+        if is_valid and current_csi < best_csi:
             best_csi = current_csi
-            best_dof = info["dof_full"]
-            best_of = info["of"]
+            best_dof = info["dof_full"].copy()
+            best_of = info["of"].copy()
+            best_step = step + 1
 
         if terminated or truncated:
             break
 
-    print(f"\n  Ottimizzazione completata. Miglior CSI trovato: {best_csi:.6f}")
-    print(f"\n  Modello: {modello_salvato}")
-
-    print(f"\n DOF ottimizzati: {best_dof}")
-    print(f"\n OF ottimizzati: {best_of}")
-
-
-    miglioramento = csi_nuovo_originale - best_csi
     print("\n" + "=" * 60)
     print("  RISULTATO INFERENZA PPO vs DATASET")
     print("=" * 60)
-    print(f"  CSI Originale (riga {riga_nuova_idx}) : {csi_nuovo_originale:.6f}")
-    print(f"  CSI Migliore PPO           : {best_csi:.6f}")
-    print(f"  Differenza (Delta CSI)     : {miglioramento:+.6f}")
+
+    # Controllo di sicurezza: l'agente ha trovato almeno UN profilo valido?
+    if best_dof is not None:
+        miglioramento = csi_nuovo_originale - best_csi
+        print(f"  Ottimizzazione completata con successo allo step {best_step}!")
+        print(f"\n  Modello: {modello_salvato}")
+        print(f"\n  DOF ottimizzati: {best_dof}")
+        print(f"\n  OF ottimizzati: {best_of}")
+        print("-" * 60)
+        print(f"  CSI Originale (riga {riga_nuova_idx}) : {csi_nuovo_originale:.6f}")
+        print(f"  CSI Migliore PPO (VALIDO): {best_csi:.6f}")
+        print(f"  Differenza (Delta CSI)   : {miglioramento:+.6f}")
+    else:
+        # Se best_dof è None, significa che in 40 step l'agente ha sempre violato phi e psi
+        print("  ATTENZIONE: L'agente non è riuscito a trovare NESSUN profilo")
+        print("  che rispettasse i vincoli di tolleranza su phi e psi.")
+        print(f"  CSI Originale (riga {riga_nuova_idx}) : {csi_nuovo_originale:.6f}")
+        # Per il grafico, se non c'è un miglior CSI valido, usiamo quello originale
+        # per non far crashare i plot
+        best_csi = csi_nuovo_originale
+
     print("=" * 60)
-
-
 
     # Determina l'etichetta da mostrare
     m = re.search(r'riga\[\d+\]$', modello_salvato)
@@ -146,7 +167,7 @@ if __name__ == "__main__":
     else:
         display_name = modello_salvato.split('/')[-1][:30]
 
-    # ===== NUOVO: Genera il grafico =====
+    # Genera il grafico
     plot_inferenza_results(
         steps_csi=steps_csi,
         best_csi=best_csi,
