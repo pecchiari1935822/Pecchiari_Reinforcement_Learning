@@ -10,7 +10,6 @@ from Ambiente.Ambiente import load_surrogate, SURROGATE_MODEL_PATH, SCALER_PATH
 from Report.Presentazione import aggiungi_slide_iterazione, slide_iniziali_task_1, slide_iniziali_task_2, aggiungi_smith
 from Report.Plot import plot_smith, plot_smith_zoom_reaction
 
-
 # ==========================================
 # TASK 1: Partenza casuale
 # ==========================================
@@ -143,27 +142,15 @@ def task_1(use_delta):
 
     # Salva presentazione
     if use_delta == True:
-        output_pptx = "Task1_delta.pptx"
+        output_pptx = os.path.join("Risultati", "Presentazioni", "Task1_delta.pptx")
     else:
-        output_pptx = "Task1_mapping completo.pptx"
+        output_pptx = os.path.join("Risultati", "Presentazioni", "Task1_mapping completo.pptx")
     prs.save(output_pptx)
 
     # Salva risultati in CSV
     df_results = pd.DataFrame(results)
     csv_path = "task1_results.csv"
     df_results.to_csv(csv_path, index=False)
-
-    print("\n" + "="*70)
-    print("  TASK 1 COMPLETATO!")
-    print("="*70)
-    print(f"\n  📊 Presentazione salvata: {output_pptx}")
-
-    print(f"\n  Riepilogo:")
-
-    print(f"    - Miglior CSI globale: {df_results['best_csi'].min():.6f}")
-    print(f"    - CSI medio: {df_results['best_csi'].mean():.6f}")
-    print(f"    - Std Dev: {df_results['best_csi'].std():.6f}")
-    print("\n")
 
     pulisci_file_temporanei()
 
@@ -368,9 +355,9 @@ def task_2(use_delta):
                     aggiungi_smith(prs, task1=None)
 
         if use_delta == True:
-            output_pptx = f"Task2_delta_riga{row_idx}.pptx"
+            output_pptx = os.path.join("Risultati", "Presentazioni", f"Task2_delta_riga{row_idx}.pptx")
         else:
-            output_pptx = f"Task2_mapping_completo_riga{row_idx}.pptx"
+            output_pptx = os.path.join("Risultati", "Presentazioni", f"Task2_mapping_completo_riga{row_idx}.pptx")
         prs.save(output_pptx)
 
     pulisci_file_temporanei()

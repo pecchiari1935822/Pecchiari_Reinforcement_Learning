@@ -289,7 +289,7 @@ def train(surrogate_fn,
             model_basename = f"ppo_task1_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_con_delta"
         else:
             model_basename = f"ppo_task1_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_senza_delta"
-        model_path = model_basename  # SB3 aggiunge .zip se serve
+        model_path = os.path.join("Risultati", "Modelli", model_basename)  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
         print(f"  Modello di output: {model_path}.zip")
@@ -314,7 +314,7 @@ def train(surrogate_fn,
             model_basename = f"ppo_task2_use_delta_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
         else:
             model_basename = f"ppo_task2_no_use_delta_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
-        model_path = model_basename  # SB3 aggiunge .zip se serve
+        model_path = os.path.join("Risultati", "Modelli", model_basename)  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
         print(f"  Modello di output: {model_path}.zip")
