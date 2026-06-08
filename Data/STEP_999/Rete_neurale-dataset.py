@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import tensorflow as tf
 from tensorflow.keras import layers, models, callbacks, optimizers
 from sklearn.metrics import mean_squared_error, r2_score
 import joblib
@@ -19,7 +18,7 @@ import joblib
 Perché normalizzare? Reti neurali convergono più velocemente quando i dati sono in range [0,1] o [-1,1]. 
 Lo scaler ci permette poi di convertire le predizioni alla scala originale per interpretarle."""
 
-import Data.Preparazione_dataset as prep
+import Data.STEP_999.Preparazione_dataset as prep
 
 # Ottieni i dati scalati e gli splitter (usiamo i dati puliti e normalizzati dopo rimozione outlier)
 #Dal file di pulizia del dtaset viengono presi i dof e gli of già normalizzati e divisi
