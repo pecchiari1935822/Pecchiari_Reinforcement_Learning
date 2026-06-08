@@ -4,7 +4,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from pathlib import Path
 from Config.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, OF_NAMES, TARGET_CSI,
-                                    TARGET_PHI, TARGET_PSI
+                                    TARGET_PHI, TARGET_PSI, modello_rete, scaler_rete
                                     )
 # ============================================================
 # CONFIGURAZIONE
@@ -14,8 +14,8 @@ from Config.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS
 AMBIENTE_DIR = Path(__file__).parent.parent.resolve()
 
 # Percorsi assoluti
-SURROGATE_MODEL_PATH = str(AMBIENTE_DIR / "Data" / "models" / "best_model.keras")
-SCALER_PATH = str(AMBIENTE_DIR / "Data" / "models" / "scalers.joblib")
+SURROGATE_MODEL_PATH = modello_rete
+SCALER_PATH = scaler_rete
 
 print(f"DEBUG: SURROGATE_MODEL_PATH = {SURROGATE_MODEL_PATH}")
 print(f"DEBUG: File esiste? {os.path.exists(SURROGATE_MODEL_PATH)}")
@@ -154,6 +154,8 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH,
     print("  Surrogate pronta.\n")
 
     return predict
+
+
 
 # ============================================================
 # FUNZIONE DI REWARD

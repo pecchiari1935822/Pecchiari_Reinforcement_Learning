@@ -1,0 +1,66 @@
+[09:59:36] START  OF=Area_GM  path=/home/shared/avio-aero/AI_based_DS/2D_compressible-new_strategy/ANN/STEP_028/results/mlp_allOF_[128,128,128]/2/
+[09:59:36] ================================================================================
+[09:59:36] PREPROCESSING SUMMARY
+[09:59:36] ================================================================================
+[09:59:36] Model: mlp_allOF_[128,128,128]
+[09:59:36] CV Strategy: none
+[09:59:36] Database: 9677 samples, 21 DOF columns, 13 OF columns
+[09:59:36] --------------------------------------------------------------------------------
+[09:59:36] DEGREES OF FREEDOM (DOF)
+[09:59:36] --------------------------------------------------------------------------------
+[09:59:36]   Group 'all':
+[09:59:36]     Pipeline: MinMaxScaler
+[09:59:36]     Columns (21): ALFAIN_BC, PITCH_BC, RE2IS_BC, MA2IS_BC, ARATIO_BC, BETA1_G0, BETA2_G0, W1_G0, W2_G0, RTE_G1, TMAXU_G1, TMAXL_G1, TMOVXU_G1, TMOVXL_G1, TUCP2_G2, TUCP3_G2, SUCP3_G2, TUCP5_G2, SUCP5_G2, TLCP5_G2, SLCP5_G2
+[09:59:36]   Total DOF columns used: 21/21
+[09:59:36] --------------------------------------------------------------------------------
+[09:59:36] OBJECTIVE FUNCTIONS (OF)
+[09:59:36] --------------------------------------------------------------------------------
+[09:59:36]   Group 'all':
+[09:59:36]     Pipeline: MinMaxScaler
+[09:59:36]     Columns (13): alfa_ex_FL, Cpt_FL, CSI_FL, phi_FL, psi_FL, Zwc_FL, DFss_mis_LO, Ds_cp_LO, Tmax_GM, X_Tmax_GM, Wedge_TE_GM, UGT_GM, Area_GM
+[09:59:36]   Total OF columns used: 13/13
+[09:59:36] --------------------------------------------------------------------------------
+[09:59:36] DATABASE INVENTORY
+[09:59:36] --------------------------------------------------------------------------------
+[09:59:36]   DOF short names: ALFAIN_BC, PITCH_BC, RE2IS_BC, MA2IS_BC, ARATIO_BC, BETA1_G0, BETA2_G0, W1_G0, W2_G0, RTE_G1, TMAXU_G1, TMAXL_G1, TMOVXU_G1, TMOVXL_G1, TUCP2_G2, TUCP3_G2, SUCP3_G2, TUCP5_G2, SUCP5_G2, TLCP5_G2, SLCP5_G2
+[09:59:36]   OF short names: alfa_ex_FL, Cpt_FL, CSI_FL, phi_FL, psi_FL, Zwc_FL, DFss_mis_LO, Ds_cp_LO, Tmax_GM, X_Tmax_GM, Wedge_TE_GM, UGT_GM, Area_GM
+[09:59:36] ================================================================================
+Model: "mlp_Area_GM"
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Layer (type)                    ┃ Output Shape           ┃       Param # ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ x (InputLayer)                  │ (None, 21)             │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ hidden_layer_0 (Dense)          │ (None, 128)            │         2,816 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ hidden_layer_1 (Dense)          │ (None, 128)            │        16,512 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ hidden_layer_2 (Dense)          │ (None, 128)            │        16,512 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ output (Dense)                  │ (None, 1)              │           129 │
+└─────────────────────────────────┴────────────────────────┴───────────────┘
+ Total params: 35,969 (140.50 KB)
+ Trainable params: 35,969 (140.50 KB)
+ Non-trainable params: 0 (0.00 B)
+Saved artifact at '/home/shared/avio-aero/AI_based_DS/2D_compressible-new_strategy/ANN/STEP_028/results/mlp_allOF_[128,128,128]/2/models/model_Area_GM'. The following endpoints are available:
+
+* Endpoint 'serve'
+  args_0 (POSITIONAL_ONLY): TensorSpec(shape=(None, 21), dtype=tf.float32, name='x')
+Output Type:
+  TensorSpec(shape=(None, 1), dtype=tf.float32, name=None)
+Captures:
+  139909163311600: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  139909146113856: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  139909146104528: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  139909239372288: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  139909239368240: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  139909239371936: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  139909239369824: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  139909239371056: TensorSpec(shape=(), dtype=tf.resource, name=None)
+[10:01:30] METRICS: 
+         mae_y      mse_y     mae_of    mape_of     mse_of      r2_of
+set                                                                  
+tr  4.306e-03  3.253e-05  1.488e-05  7.717e-03  3.883e-10  9.989e-01 
+va  4.657e-03  3.726e-05  1.609e-05  8.486e-03  4.448e-10  9.988e-01 
+te  4.317e-03  3.175e-05  1.492e-05  8.748e-03  3.790e-10  9.987e-01 
+[10:01:33] DONE   OF=Area_GM

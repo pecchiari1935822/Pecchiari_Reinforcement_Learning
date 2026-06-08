@@ -1,13 +1,41 @@
-# Parametri che descrivono lunghezza episodio e lunghezza del training
-TOTAL_TIMESTEPS = 600_000
+import pandas as pd
+from pathlib import Path
+
+
+# =====================================================================
+# 0. CONFIGURAZIONE DEL DATASET CORRENTE
+# =====================================================================
+
+data_dir = Path(__file__).parent.parent.resolve()
+
+# Percorsi per trovare il surrogato, glu scaler e il dataset che si vuole utilizzare
+modello_rete = str(data_dir / "Data" / "STEP_999" / "models" / "best_model.keras")
+scaler_rete = str(data_dir / "Data" / "STEP_028" / "scalers" / "scalers.joblib")
+dataset = str(data_dir / "Data" / "STEP_028" / "database.dat")
+
+
+# Carica il dataset (usa pd.read_excel se i tuoi file sono in formato Excel)
+df = pd.read_csv(dataset)
+df.columns = df.columns.str.replace("_OP_01", "", regex=False)
+df.columns = df.columns.str.replace("_GEOM_", "", regex=False)
+df.columns = df.columns.str.replace("_BC_", "", regex=False)
+df.columns = df.columns.str.replace("_G0_", "", regex=False)
+df.columns = df.columns.str.replace("_G1_", "", regex=False)
+df.columns = df.columns.str.replace("_G2_", "", regex=False)
+df.columns = df.columns.str.replace("_FL_", "", regex=False)
+df.columns = df.columns.str.replace("_LO_", "", regex=False)
+df.columns = df.columns.str.replace("_GM_", "", regex=False)
+
+
+# =====================================================================
+# 1. PARAMETRI DI TRAINING (Rimangono invariati)
+# =====================================================================
+TOTAL_TIMESTEPS = 10_000
 learning_rate = [0.00003]
 n_steps = [200]
-early_stopping = None
+early_stopping = True
+ACTION_SCALE = 0.05
 
-# Azione che viene fatta dall'attore che interagisce con l'ambiente
-ACTION_SCALE   = 0.05
-
-# Parametri che decrivono come è costruito il PPO
 PPO_PARAMS = dict(
     n_epochs        = 10,
     gamma           = 0.99,
@@ -19,60 +47,65 @@ PPO_PARAMS = dict(
     verbose         = 1,
 )
 
-# Cosa si vuole ottimizzare (quali DOF) e in quale riga del file di input
-ROW_INDEX = [710]  # INSERISCI L'INDICE DELLA RIGA CHE VUOI OTTIMIZZARE
+ROW_INDEX = [879]  # Modificalo se la riga di partenza cambia nel nuovo dataset
 
-DOF_BOUNDS_ALL = [
-    (0.084,   0.140),    # DOF_PITCH_GEOM
-    (0.034,  19.966),    # DOF_BETA1_GEOM
-    (-69.996, -60.121),  # DOF_BETA2_GEOM_
-    (0.0,     0.745),    # DOF_W1_GEOM
-    (0.001,   0.999),    # DOF_W2_GEOM
-    (-0.149,  0.199),    # DOF_TMOVXU_GEOM_
-    (-0.150,  0.200),    # DOF_TMOVXL_GEOM_
-]
+# =====================================================================
+# 2. ESTRAZIONE DINAMICA AUTOMATICA (La parte magica ✨)
+# =====================================================================
 
-DOF_NAMES_ALL = [
-    "DOF_PITCH", "DOF_BETA1", "DOF_BETA2",
-    "DOF_W1", "DOF_W2", "DOF_TMOVXU", "DOF_TMOVXL"
-]
+# Trova automaticamente tutte le colonne che iniziano con "DOF" o "OF"
+DOF_NAMES_ALL = [col for col in df.columns if col.upper().startswith("DOF")]
+OF_NAMES      = [col for col in df.columns if col.upper().startswith("OF")]
 
-OF_NAMES = [
-    "OF_alfa_ex", "OF_Cpt",      "OF_CSI",
-    "OF_phi",     "OF_psi",      "OF_Zwi",
-    "OF_Zwc",     "OF_DFss_mis", "OF_DFss_cp",
-    "OF_Mis_peak","OF_s_peak",   "OF_s_diff_dim",
-    "OF_s_tot_SS","OF_Tmax",     "OF_X_Tmax"
-]
+print("OF_names", OF_NAMES)
+print("DOF_NAMES", DOF_NAMES_ALL)
 
 n_dof_totali = len(DOF_NAMES_ALL)
-n_of_totali = len(OF_NAMES)
+n_of_totali  = len(OF_NAMES)
 
-# Colonne target usate nella funzione di reward e nei controlli
-TARGET_CSI = "OF_CSI"
-TARGET_PSI = "OF_psi"
-TARGET_PHI = "OF_phi"
+# Calcola i BOUNDS (min e max) estraendoli direttamente dai valori del dataset
+# Crea una lista di tuple (min, max) per ogni DOF trovato
+DOF_BOUNDS_ALL = [(float(df[col].min()), float(df[col].max())) for col in DOF_NAMES_ALL]
 
-# Valori di e psi a cui voglio vincolare il profilo (se non il profilo è vincolato a quelli del profilo di partenza)
+print("DOF_BOUNDS_ALL", DOF_BOUNDS_ALL)
+
+# =====================================================================
+# 3. ASSEGNAZIONE DELLE COLONNE TARGET
+# =====================================================================
+# Queste variabili cercano la colonna in cui è contenuto il nome così da poter essere usata
+# come argomento posizionale in seguito
+TARGET_CSI = next((col for col in OF_NAMES if "CSI" in col.upper()), None)
+TARGET_PSI = next((col for col in OF_NAMES if "PSI" in col.upper()), None)
+TARGET_PHI = next((col for col in OF_NAMES if "PHI" in col.upper()), None)
+
+# Se voglio che phi e psi siano fissate ad un determinato valore
 target_phi = None
 target_psi = None
-
 perturbazione_dof_attivi = None
 
-ACTIVE_DOF_INDICES = [0,1,2,3,4,5,6]  # INSERISCI GLI INDICI DEI DOF CHE VUOI OTTIMIZZARE (0-5)
+# =====================================================================
+# 4. GESTIONE DEI DOF ATTIVI E COMBINAZIONI
+# =====================================================================
+# Di default, attiva TUTTI i DOF trovati nel dataset
+ACTIVE_DOF_INDICES = list(range(n_dof_totali))
 
-COPPIE_CUSTOM = [[1, 3], [2, 4], [5, 6]]
+print("ACTIVE_DOF_INDICES", ACTIVE_DOF_INDICES)
+
+# Coppie custom (manteniamo le tue, ma con un controllo di sicurezza)
+# Se il nuovo dataset ha meno DOF, evita che il codice vada in errore (IndexError)
+COPPIE_CUSTOM_INPUT = [[1, 3], [2, 4], [5, 6]]
+COPPIE_CUSTOM = [coppia for coppia in COPPIE_CUSTOM_INPUT if max(coppia) < n_dof_totali]
 
 combinazioni_da_testare = []
 
-# A. Aggiungi ogni DOF singolarmente
+# A. Aggiungi ogni DOF singolarmente (opzionale, scommenta se serve)
 '''for idx in ACTIVE_DOF_INDICES:
     combinazioni_da_testare.append([idx])'''
 
-# B. Aggiungi le coppie custom definite sopra
+# B. Aggiungi le coppie custom filtrate
 '''for coppia in COPPIE_CUSTOM:
     combinazioni_da_testare.append(coppia)'''
 
-# C. Aggiungi tutti i DOF insieme (solo se sono più di 1, per evitare doppioni)
+# C. Aggiungi tutti i DOF insieme
 if len(ACTIVE_DOF_INDICES) > 1:
     combinazioni_da_testare.append(ACTIVE_DOF_INDICES)

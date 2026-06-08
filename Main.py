@@ -4,7 +4,7 @@ import numpy as np
 from pptx import Presentation
 from pathlib import Path
 from Config.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, \
-    OF_NAMES, TARGET_CSI, perturbazione_dof_attivi, DOF_BOUNDS_ALL, DOF_NAMES_ALL
+    OF_NAMES, TARGET_CSI, perturbazione_dof_attivi, DOF_BOUNDS_ALL, DOF_NAMES_ALL, dataset, df
 from Agente.PPO import train, pulisci_file_temporanei
 from Ambiente.Ambiente import load_surrogate, SURROGATE_MODEL_PATH, SCALER_PATH
 from Report.Presentazione import aggiungi_slide_iterazione, slide_iniziali_task_1, slide_iniziali_task_2, aggiungi_smith
@@ -171,17 +171,14 @@ def task_2(use_delta):
 
     # 1. Imposta il percorso del tuo dataset e la riga che vuoi analizzare
     DATABASE_DIR = Path(__file__).parent.resolve()
-    DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
+    DATASET_PATH = dataset
     TEMPLATE_PATH = str(DATABASE_DIR / "Report" / "Template.pptx")
 
     if os.path.exists(TEMPLATE_PATH):
         print(f"Caricamento template da: {TEMPLATE_PATH}")
         prs = Presentation(TEMPLATE_PATH)
 
-    df = pd.read_csv(DATASET_PATH)
-    df.columns = df.columns.str.replace("_OP_01", "", regex=False)
-    df.columns = df.columns.str.replace("_GEOM_", "", regex=False)
-    df.columns = df.columns.str.replace("_BC_", "", regex=False)
+
 
     for row_idx in ROW_INDEX:
 
@@ -363,7 +360,7 @@ def task_2(use_delta):
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    task_1(True)
+    #task_1(True)
     #task_1(False)
-    #task_2(True)
+    task_2(True)
     #task_2(False)

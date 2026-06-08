@@ -1,0 +1,97 @@
+{
+  "name": "mlp_allOF_[128,128,128]",
+  "ts": "2",
+  "cv": {
+    "strategy": "none",
+    "valid": 0.2
+  },
+  "preproc": {
+    "DOF": {
+      "all": {
+        "cols": "all",
+        "scaler": "MinMaxScaler"
+      }
+    },
+    "OF": {
+      "all": {
+        "cols": "all",
+        "scaler": "MinMaxScaler"
+      }
+    }
+  },
+  "model": {
+    "type": "mlp",
+    "build": {
+      "hidden": [
+        {
+          "type": "Dense",
+          "params": {
+            "units": 128,
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "Dense",
+          "params": {
+            "units": 128,
+            "activation": "relu"
+          }
+        },
+        {
+          "type": "Dense",
+          "params": {
+            "units": 128,
+            "activation": "relu"
+          }
+        }
+      ],
+      "output": {
+        "type": "Dense",
+        "params": {
+          "units": 1
+        }
+      }
+    },
+    "compile": [
+      {
+        "optimizer": {
+          "type": "Adam",
+          "params": {
+            "learning_rate": 0.01
+          }
+        },
+        "loss": "mse",
+        "metrics": [
+          "mae"
+        ]
+      }
+    ],
+    "fit": [
+      {
+        "batch_size": 256,
+        "epochs": 2000,
+        "callbacks": [
+          {
+            "type": "EarlyStopping",
+            "params": {
+              "monitor": "val_loss",
+              "patience": 50,
+              "restore_best_weights": true,
+              "verbose": 0
+            }
+          },
+          {
+            "type": "ReduceLROnPlateau",
+            "params": {
+              "monitor": "val_loss",
+              "factor": 0.5,
+              "patience": 15,
+              "cooldown": 30,
+              "verbose": 0
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
