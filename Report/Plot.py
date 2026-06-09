@@ -7,6 +7,7 @@ from Smith_Chart.Reaction_total_to_total.Smith_chart_reaction_total_to_total imp
 from Smith_Chart.Action_total_to_static.Smith_chart_action_uscita_assiale import SmithDiagram_Action_Assiale
 from Smith_Chart.Action_total_to_total.Smith_chart_action_total_to_total import SmithDiagram_Action_total_to_total
 from pathlib import Path
+import math
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -39,7 +40,7 @@ def _plot_results(cb: 'BladeCallback', lr, n_step, save_path="plot_results.png",
 
     fig = plt.figure(figsize=(16, 10))
     fig.suptitle(
-        f"PPO Blade Opt. — DOF attivi: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}\n"
+        f"PPO Blade Opt. — DOF attivi: Tutti\n"
         f"Total steps={TOTAL_TIMESTEPS:,}  "
         f"n_steps={n_step}" 
         f" Learning_Rate={lr}"
@@ -97,184 +98,70 @@ def _plot_results(cb: 'BladeCallback', lr, n_step, save_path="plot_results.png",
     return save_path
 
 
-def _plot_dof_evolution(cb: 'BladeCallback', lr, n_step, start_dof = None, save_path="plot_dof_evolution.png"):
-    """
-    Crea un grafico per ogni DOF mostrando l'andamento del miglior valore trovato
-    in ogni episodio per tutta la durata dell'addestramento, colorando i punti in
-    base al numero dell'episodio.
-    """
-
-
+def _plot_dof_evolution(cb: 'BladeCallback', lr, n_step, start_dof=None, base_save_path="plot_dof_evolution"):
     if not cb.episode_best_dofs:
         print("  Nessun dato dei DOF da plottare.")
-        return
+        return []
 
-    # Trasforma la lista di array in una matrice (n_episodi, 7_dof)
     dof_data = np.array(cb.episode_best_dofs)
     n_episodes = dof_data.shape[0]
     ep_axis = np.arange(n_episodes)
-
     best_ep_idx = int(np.argmin(cb.episode_csi))
 
-    np.random.seed(42)  # Fissa il seed così i colori non cambiano a ogni run
-    colori_per_episodio = np.random.uniform(0.1,0.75,size=(n_episodes, 3))
-
-    # Creiamo una griglia 4x2 standard (senza sharex)
-    fig, axes = plt.subplots(4, 2, figsize=(16, 8.5))
-
-    axes_flat = axes.flatten()
-
-    for i in range(n_dof_totali):
-        ax = axes_flat[i]
-        y_vals = dof_data[:, i]
-
-        if i in ACTIVE_DOF_INDICES:
-            title_suffix = " (Attivo)"
-            ma_color = "black"
-
-            # Sfumatura di colore: c=ep_axis mappa il colore sul numero dell'episodio
-            # cmap='viridis' va da viola scuro (inizio), a verde (centro), a giallo (fine)
-            ax.scatter(ep_axis, y_vals, c=colori_per_episodio, s=15, alpha=0.8)
-
-            # Elemento "fantasma" per mostrare l'etichetta nella legenda
-            # (altrimenti scatter con c= array non crea un'etichetta semplice)
-            ax.plot([], [], 'o', color='mediumseagreen', markersize=5, label="Miglior DOF/Ep")
-        else:
-            title_suffix = " (Fisso)"
-            ma_color = "black"
-            ax.scatter(ep_axis, y_vals, color='gray', s=15, alpha=0.5, label="Fisso")
-
-        # Aggiungi una media mobile per vedere meglio il trend
-        '''if n_episodes > 10:
-            w = max(5, n_episodes // 20)
-            ma = np.convolve(y_vals, np.ones(w) / w, mode='valid')
-            ax.plot(np.arange(w - 1, n_episodes), ma, color=ma_color, lw=2, label=f"Media mobile ({w} ep)")'''
-
-        if start_dof is not None:
-            start_val = start_dof[i]
-            # Mettiamo il cerchio all'episodio 0 (inizio training)
-            ax.plot(0, start_val, marker='o', color='cyan', markeredgecolor='black',
-                    markersize=10, linestyle='None', zorder=5, label="Partenza")
-
-        if cb.best_dof is not None:
-            best_val = cb.best_dof[i]
-            # Usiamo zorder=5 per assicurarci che la X venga disegnata SOPRA le barre e le linee
-            ax.plot(best_ep_idx, best_val, marker='X', color='red', markeredgecolor='black',
-                    markersize=12, linestyle='None', zorder=5, label="Miglior Assoluto")
-
-        # Disegna i limiti fisici (bounds)
-        dof_min, dof_max = DOF_BOUNDS_ALL[i]
-        ax.axhline(dof_min, color='red', ls='--', lw=1, alpha=0.5)
-        ax.axhline(dof_max, color='red', ls='--', lw=1, alpha=0.5)
-
-        ax.set_title(DOF_NAMES_ALL[i] + title_suffix, fontsize=12)
-        ax.set_xlabel("Episodio", fontsize=10)
-        ax.set_ylabel("Valore", fontsize=10)
-        ax.grid(alpha=0.3)
-
-        if i in ACTIVE_DOF_INDICES:
-            ax.legend(fontsize=8, loc='best')
-
-    # Nascondi l'ottavo grafico vuoto
-    axes_flat[n_dof_totali].set_visible(False)
-
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig(save_path, bbox_inches='tight', dpi=150)
-    plt.close()
-
-    return save_path
-
-
-def _plot_dof_evolution_barre(cb: 'BladeCallback', lr, n_step,start_dof = None, save_path="plot_dof_evolution_barre.png"):
-    """
-    Crea un grafico per ogni DOF mostrando l'andamento del miglior valore trovato
-    in ogni episodio. Usa barre verticali colorate casualmente per ogni episodio.
-    """
-    if not cb.episode_best_dofs:
-        print("  Nessun dato dei DOF da plottare.")
-        return
-
-    # Trasforma la lista di array in una matrice (n_episodi, 7_dof)
-    dof_data = np.array(cb.episode_best_dofs)
-    n_episodes = dof_data.shape[0]
-    ep_axis = np.arange(n_episodes)
-
-    best_ep_idx = int(np.argmin(cb.episode_csi))
-
-    # Generiamo un colore RGB casuale per OGNI episodio
     np.random.seed(42)
-    colori_per_episodio = np.random.uniform(0.1,0.75,size=(n_episodes, 3))
+    colori_per_episodio = np.random.uniform(0.1, 0.75, size=(n_episodes, 3))
 
-    # Creiamo una griglia 4x2 standard
-    fig, axes = plt.subplots(4, 2, figsize=(16, 8.5))
+    # --- LOGICA DI DIVISIONE (8 DOF per immagine) ---
+    dofs_per_fig = 8
+    num_figs = math.ceil(n_dof_totali / dofs_per_fig)
+    saved_paths = []
 
-    axes_flat = axes.flatten()
+    for f in range(num_figs):
+        start_idx = f * dofs_per_fig
+        end_idx = min(start_idx + dofs_per_fig, n_dof_totali)
+        current_dofs = range(start_idx, end_idx)
 
-    for i in range(n_dof_totali):
-        ax = axes_flat[i]
-        y_vals = dof_data[:, i]
+        # Griglia 4x2
+        fig, axes = plt.subplots(4, 2, figsize=(16, 10))
+        axes_flat = axes.flatten()
 
-        if i in ACTIVE_DOF_INDICES:
-            title_suffix = " (Attivo)"
-            ma_color = "black"
+        for idx_in_grid, i in enumerate(current_dofs):
+            ax = axes_flat[idx_in_grid]
+            y_vals = dof_data[:, i]
 
-            # Disegna le BARRE colorate
-            ax.bar(ep_axis, y_vals, color="dodgerblue", width=1.0, alpha=0.9)
+            # Scatter plot (Puntini) - Rimosse le Barre come richiesto
+            if i in ACTIVE_DOF_INDICES:
+                ax.scatter(ep_axis, y_vals, c=colori_per_episodio, s=15, alpha=0.8)
+                ax.plot([], [], 'o', color='mediumseagreen', markersize=5, label="Miglior DOF/Ep")
+            else:
+                ax.scatter(ep_axis, y_vals, color='gray', s=15, alpha=0.5, label="Fisso")
 
-            # Elemento fantasma per la legenda (barra vuota)
-            ax.bar([-10], [0], color='gray', label="Miglior DOF/Ep")
-        else:
-            title_suffix = " (Fisso)"
-            ma_color = "black"
-            ax.bar(ep_axis, y_vals, color='gray', width=1.0, alpha=0.5, label="Fisso")
+            # Marker di Partenza e Migliore Assoluto
+            if start_dof is not None:
+                ax.plot(0, start_dof[i], marker='o', color='cyan', markersize=10, label="Partenza", zorder=5)
+            if cb.best_dof is not None:
+                ax.plot(best_ep_idx, cb.best_dof[i], marker='X', color='red', markersize=12, label="Miglior", zorder=5)
 
-        # Aggiungi una media mobile per vedere meglio il trend
-        '''if n_episodes > 10:
-            w = max(5, n_episodes // 20)
-            ma = np.convolve(y_vals, np.ones(w) / w, mode='valid')
-            ax.plot(np.arange(w - 1, n_episodes), ma, color=ma_color, lw=2, label=f"Media mobile ({w} ep)")'''
+            # Bounds
+            dof_min, dof_max = DOF_BOUNDS_ALL[i]
+            ax.axhline(dof_min, color='red', ls='--', lw=1, alpha=0.5)
+            ax.axhline(dof_max, color='red', ls='--', lw=1, alpha=0.5)
 
-        if start_dof is not None:
-            start_val = start_dof[i]
-            # Mettiamo il cerchio all'episodio 0 (inizio training)
-            ax.plot(0, start_val, marker='o', color='cyan', markeredgecolor='black',
-                    markersize=10, linestyle='None', zorder=5, label="Partenza")
+            ax.set_title(f"{DOF_NAMES_ALL[i]}", fontsize=12)
+            ax.grid(alpha=0.3)
+            if i in ACTIVE_DOF_INDICES: ax.legend(fontsize=8, loc='best')
 
-        if cb.best_dof is not None:
-            best_val = cb.best_dof[i]
-            # Usiamo zorder=5 per assicurarci che la X venga disegnata SOPRA le barre e le linee
-            ax.plot(best_ep_idx, best_val, marker='X', color='red', markeredgecolor='black',
-                    markersize=12, linestyle='None', zorder=5, label="Miglior Assoluto")
+        # Nascondi assi vuoti se l'ultimo gruppo è < 8
+        for j in range(len(current_dofs), 8):
+            axes_flat[j].set_visible(False)
 
-        # Disegna i limiti fisici (bounds)
-        dof_min, dof_max = DOF_BOUNDS_ALL[i]
-        ax.axhline(dof_min, color='red', ls='--', lw=1, alpha=0.5)
-        ax.axhline(dof_max, color='red', ls='--', lw=1, alpha=0.5)
+        path = f"{base_save_path}_{f + 1}.png"
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.savefig(path, bbox_inches='tight', dpi=150)
+        plt.close()
+        saved_paths.append(path)
 
-        # --- IMPORTANTE: FORZA LO ZOOM DELL'ASSE Y ---
-        # Evita che le barre partano forzatamente da 0 rovinando la scala
-        padding = (dof_max - dof_min) * 0.1
-        if padding == 0: padding = 0.1
-        ax.set_ylim(dof_min - padding, dof_max + padding)
-
-        ax.set_title(DOF_NAMES_ALL[i] + title_suffix, fontsize=12)
-        ax.set_xlabel("Episodio", fontsize=10)
-        ax.set_ylabel("Valore", fontsize=10)
-        ax.grid(alpha=0.3)
-        ax.set_xlim(left=-1, right=n_episodes)
-
-        if i in ACTIVE_DOF_INDICES:
-            ax.legend(fontsize=8, loc='best')
-
-    # Nascondi l'ottavo grafico vuoto
-    axes_flat[n_dof_totali].set_visible(False)
-
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
-    plt.savefig(save_path, bbox_inches='tight', dpi=150)
-    plt.close()
-
-    return save_path
-
+    return saved_paths
 
 def _plot_training_metrics_actor(cb: 'BladeCallback', lr, n_step, save_path="plot_metrics_actor.png"):
     from Agente.PPO import TOTAL_TIMESTEPS
@@ -295,7 +182,7 @@ def _plot_training_metrics_actor(cb: 'BladeCallback', lr, n_step, save_path="plo
 
     fig, axes = plt.subplots(3, 3, figsize=(16, 11))
     fig.suptitle(
-        f"Metriche interne Actor — DOF: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}\n"
+        f"Metriche interne Actor — DOF: Tutti\n"
         f"Total steps={TOTAL_TIMESTEPS:,}  n_steps={n_step}  Learning_Rate={lr} ",
         fontsize=16
     )
@@ -372,7 +259,7 @@ def _plot_training_metrics_critic(cb: 'BladeCallback',lr , n_step, save_path="pl
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     fig.suptitle(
-        f"Metriche interne Actor — DOF: {[DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]}\n"
+        f"Metriche interne Actor — DOF: Tutti\n"
         f"Total steps={TOTAL_TIMESTEPS:,}  n_steps={n_step}  Learning_Rate={lr} ",
         fontsize=16
     )

@@ -6,12 +6,56 @@ from pathlib import Path
 # 0. CONFIGURAZIONE DEL DATASET CORRENTE
 # =====================================================================
 
+USE_MULTIMODEL = None
+
 data_dir = Path(__file__).parent.parent.resolve()
 
-# Percorsi per trovare il surrogato, glu scaler e il dataset che si vuole utilizzare
-modello_rete = str(data_dir / "Data" / "STEP_999" / "models" / "best_model.keras")
-scaler_rete = str(data_dir / "Data" / "STEP_028" / "scalers" / "scalers.joblib")
-dataset = str(data_dir / "Data" / "STEP_028" / "database.dat")
+if not USE_MULTIMODEL:
+    modello_rete = str(data_dir / "Data" / "STEP_999" / "models" / "best_model.keras")
+    scaler_rete = str(data_dir / "Data" / "STEP_999" / "scalers" / "scalers.joblib")
+    dataset = str(data_dir / "Data" / "STEP_999" / "database.dat")
+
+else:
+    nuovi_modelli_dir = data_dir / "Data" / "STEP_028"
+
+    modello_rete = {
+        "ALFA_EX": str(nuovi_modelli_dir / "models" / "model_alfa_ex_FL.keras"),
+        "CPT": str(nuovi_modelli_dir / "models" / "model_Cpt_FL.keras"),
+        "CSI": str(nuovi_modelli_dir / "models" / "model_CSI_FL.keras"),
+        "PSI": str(nuovi_modelli_dir / "models" / "model_PSI_FL.keras"),
+        "PHI": str(nuovi_modelli_dir / "models" / "model_PHI_FL.keras"),
+        "ZWC": str(nuovi_modelli_dir / "models" / "model_Zwc_FL.keras"),
+        "DFSS_MIS": str(nuovi_modelli_dir / "models" / "model_DFss_Mis_LO.keras"),
+        "DS_CP": str(nuovi_modelli_dir / "models" / "model_Ds_cp_LO.keras"),
+        "TMAX": str(nuovi_modelli_dir / "models" / "model_Tmax_GM.keras"),
+        "X_TMAX": str(nuovi_modelli_dir / "models" / "model_X_Tmax_GM.keras"),
+        "WEDGE_TE": str(nuovi_modelli_dir / "models" / "model_Wedge_TE_GM.keras"),
+        "UGT": str(nuovi_modelli_dir / "models" / "model_UGT_GM.keras"),
+        "Area": str(nuovi_modelli_dir / "models" / "model_Area_GM.keras")
+
+    }
+
+    scaler_rete = {
+        "X_GLOBAL": str(nuovi_modelli_dir / "scalers" / "scaler_DOF.joblib"),
+        "ALFA_EX" : str(nuovi_modelli_dir / "scalers" / "scaler_OF_alfa_ex_FL.joblib"),
+        "CPT": str(nuovi_modelli_dir / "scalers" / "scaler_OF_Cpt_FL.joblib"),
+        "CSI": str(nuovi_modelli_dir / "scalers" / "scaler_OF_CSI_FL.joblib"),
+        "PSI": str(nuovi_modelli_dir / "scalers" / "scaler_OF_PSI_FL.joblib"),
+        "PHI": str(nuovi_modelli_dir / "scalers" / "scaler_OF_PHI_FL.joblib"),
+        "ZWC": str(nuovi_modelli_dir / "scalers" / "scaler_OF_Zwc_FL.joblib"),
+        "DFSS_MIS": str(nuovi_modelli_dir / "scalers" / "scaler_OF_DFss_Mis_LO.joblib"),
+        "DS_CP": str(nuovi_modelli_dir / "scalers" / "scaler_OF_Ds_cp_LO.joblib"),
+        "TMAX": str(nuovi_modelli_dir / "scalers" / "scaler_OF_Tmax_GM.joblib"),
+        "X_TMAX": str(nuovi_modelli_dir / "scalers" / "scaler_OF_X_Tmax_GM.joblib"),
+        "WEDGE_TE": str(nuovi_modelli_dir / "scalers" / "scaler_OF_Wedge_TE_GM.joblib"),
+        "UGT": str(nuovi_modelli_dir / "scalers" / "scaler_OF_UGT_GM.joblib"),
+        "Area": str(nuovi_modelli_dir / "scalers" / "scaler_OF_Area_GM.joblib")
+    }
+
+    dataset = str(nuovi_modelli_dir / "database.dat")
+
+    print(modello_rete)
+    print("\n", scaler_rete)
 
 
 # Carica il dataset (usa pd.read_excel se i tuoi file sono in formato Excel)
@@ -30,7 +74,7 @@ df.columns = df.columns.str.replace("_GM_", "", regex=False)
 # =====================================================================
 # 1. PARAMETRI DI TRAINING (Rimangono invariati)
 # =====================================================================
-TOTAL_TIMESTEPS = 10_000
+TOTAL_TIMESTEPS = 600_000
 learning_rate = [0.00003]
 n_steps = [200]
 early_stopping = True
@@ -48,6 +92,7 @@ PPO_PARAMS = dict(
 )
 
 ROW_INDEX = [879]  # Modificalo se la riga di partenza cambia nel nuovo dataset
+
 
 # =====================================================================
 # 2. ESTRAZIONE DINAMICA AUTOMATICA (La parte magica ✨)

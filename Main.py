@@ -4,7 +4,7 @@ import numpy as np
 from pptx import Presentation
 from pathlib import Path
 from Config.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, \
-    OF_NAMES, TARGET_CSI, perturbazione_dof_attivi, DOF_BOUNDS_ALL, DOF_NAMES_ALL, dataset, df
+    OF_NAMES, TARGET_CSI, perturbazione_dof_attivi, DOF_BOUNDS_ALL, DOF_NAMES_ALL, dataset, df, USE_MULTIMODEL
 from Agente.PPO import train, pulisci_file_temporanei
 from Ambiente.Ambiente import load_surrogate, SURROGATE_MODEL_PATH, SCALER_PATH
 from Report.Presentazione import aggiungi_slide_iterazione, slide_iniziali_task_1, slide_iniziali_task_2, aggiungi_smith
@@ -68,13 +68,25 @@ def task_1(use_delta):
                 raise RuntimeError(
                     "best_of è None: nessun profilo è stato salvato come best. Controlla callback/env info['of'].")
 
-            phi_ottimale = float(best_of[OF_NAMES.index("OF_phi")])
-            psi_ottimale = float(best_of[OF_NAMES.index("OF_psi")])
+            # Cerca l'indice di PHI e PSI in modo flessibile nella lista OF_NAMES
+            idx_phi_reale = next((i for i, name in enumerate(OF_NAMES) if "PHI" in name.upper()), None)
+            idx_psi_reale = next((i for i, name in enumerate(OF_NAMES) if "PSI" in name.upper()), None)
+            idx_alfa_ex_reale = next((i for i, name in enumerate(OF_NAMES) if "ALFA_EX" in name.upper()), None)
+            idx_alfa_in_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "ALFAIN" in name.upper()), None)
+            idx_beta1_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA1" in name.upper()), None)
+            idx_beta2_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA2" in name.upper()), None)
 
-            alpha_ex_ottimale = float(best_of[OF_NAMES.index("OF_alfa_ex")])
-            alpha_in_ottimale = 10
-            beta_1_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA1")])
-            beta_2_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA2")])
+            if idx_phi_reale is not None:
+                phi_ottimale = float(best_of[idx_phi_reale])
+
+            if idx_psi_reale is not None:
+                psi_ottimale = float(best_of[idx_psi_reale])
+
+
+            alpha_ex_ottimale = float(best_of[idx_alfa_ex_reale])
+            alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
+            beta_1_ottimale = float(best_dof[idx_beta1_reale])
+            beta_2_ottimale = float(best_dof[idx_beta2_reale])
 
 
 
@@ -102,14 +114,13 @@ def task_1(use_delta):
             }
 
             # Immagini generate dal training
-            img_paths = [
-                "plot_results.png",
-                "plot_dof_evolution.png",
-                "plot_dof_evolution_barre.png",
+            import glob
+            img_paths = ["plot_results.png"]
+            img_paths.extend(sorted(glob.glob("plot_dof_evolution_*.png")))
+            img_paths.extend([
                 "plot_metrics_actor.png",
                 "plot_metrics_critic.png",
-
-            ]
+            ])
 
             # Aggiungi slide con risultati
             # NOTA: start_dof=None perché non sappiamo il profilo iniziale casuale
@@ -123,7 +134,11 @@ def task_1(use_delta):
                     best_dof=best_dof,
                     best_of=best_of,
                     start_dof=None,  # Placeholder
-                    start_of=None
+                    start_of=None,
+                    alpha_ex_ottimale=alpha_ex_ottimale,
+                    alpha_in_ottimale=alpha_in_ottimale,
+                    beta_1_ottimale=beta_1_ottimale,
+                    beta_2_ottimale=beta_2_ottimale
                 )
             except Exception as e:
                 print(f"  ⚠️  Errore nell'aggiunta slide: {e}")
@@ -152,7 +167,7 @@ def task_1(use_delta):
     csv_path = "task1_results.csv"
     df_results.to_csv(csv_path, index=False)
 
-    pulisci_file_temporanei()
+    pulisci_file_temporanei(task_1=task_1)
 
 
 # ==========================================
@@ -166,8 +181,6 @@ def task_2(use_delta):
     else:
         print ("\n⚠️  Modalità mapping completo: il PPO ottimizzerà direttamente il CSI senza considerare il delta.")
     episode_length = 20
-
-    prs = Presentation()
 
     # 1. Imposta il percorso del tuo dataset e la riga che vuoi analizzare
     DATABASE_DIR = Path(__file__).parent.resolve()
@@ -286,16 +299,30 @@ def task_2(use_delta):
                         raise RuntimeError(
                             "best_of è None: nessun profilo è stato salvato come best. Controlla callback/env info['of'].")
 
-                    phi_ottimale = float(best_of[OF_NAMES.index("OF_phi")])
-                    psi_ottimale = float(best_of[OF_NAMES.index("OF_psi")])
+                    # Cerca l'indice di PHI e PSI in modo flessibile nella lista OF_NAMES
+                    idx_phi_reale = next((i for i, name in enumerate(OF_NAMES) if "PHI" in name.upper()), None)
+                    idx_psi_reale = next((i for i, name in enumerate(OF_NAMES) if "PSI" in name.upper()), None)
+                    idx_alfa_ex_reale = next((i for i, name in enumerate(OF_NAMES) if "ALFA_EX" in name.upper()), None)
+                    idx_alfa_in_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "ALFAIN" in name.upper()), None)
+                    idx_beta1_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA1" in name.upper()), None)
+                    idx_beta2_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA2" in name.upper()), None)
 
-                    alpha_ex_ottimale = float(best_of[OF_NAMES.index("OF_alfa_ex")])
-                    alpha_in_ottimale = 10
-                    beta_1_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA1")])
-                    beta_2_ottimale = float(best_of[DOF_NAMES_ALL.index("DOF_BETA2")])
+                    if idx_phi_reale is not None:
+                        phi_ottimale = float(best_of[idx_phi_reale])
 
-                    orig_phi = float(start_of_originali[OF_NAMES.index("OF_phi")])
-                    orig_psi = float(start_of_originali[OF_NAMES.index("OF_psi")])
+                    if idx_psi_reale is not None:
+                        psi_ottimale = float(best_of[idx_psi_reale])
+
+                    alpha_ex_ottimale = float(best_of[idx_alfa_ex_reale])
+                    if USE_MULTIMODEL == True:
+                        alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
+                    else:
+                        alpha_in_ottimale = 10
+                    beta_1_ottimale = float(best_dof[idx_beta1_reale])
+                    beta_2_ottimale = float(best_dof[idx_beta2_reale])
+
+                    orig_phi = float(start_of_originali[idx_phi_reale])
+                    orig_psi = float(start_of_originali[idx_psi_reale])
 
 
 
@@ -325,11 +352,16 @@ def task_2(use_delta):
                     print(f"\n  Riga {row_idx} (index={row.name}):")
                     print(row.to_frame().T.to_string(index=False))
 
+                    import glob
+
                     path_img1 = "plot_results.png"
-                    path_img2 = "plot_dof_evolution.png"
-                    path_img3 = "plot_dof_evolution_barre.png"
+                    # glob.glob espande l'asterisco e trova plot_dof_evolution_1.png, _2.png, _3.png
+                    path_dof_evolutions = sorted(glob.glob("plot_dof_evolution_*.png"))
                     path_img4 = "plot_metrics_actor.png"
                     path_img5 = "plot_metrics_critic.png"
+
+                    # Costruiamo la lista unendo dinamicamente i grafici trovati
+                    img_paths = [path_img1] + path_dof_evolutions + [path_img4, path_img5]
 
 
                     parametri_iterazione = {
@@ -342,12 +374,8 @@ def task_2(use_delta):
                     }
 
 
-                    # 3. Aggiungi i risultati alla presentazione
-                    img_paths = [path_img1, path_img2, path_img3, path_img4, path_img5]
-
-
-
-                    aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_dof_dataset, start_of_originali)
+                    aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_dof_dataset, start_of_originali,
+                                              alpha_ex_ottimale, alpha_in_ottimale, beta_1_ottimale, beta_2_ottimale)
 
                     aggiungi_smith(prs, task1=None)
 

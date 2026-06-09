@@ -6,6 +6,7 @@ from pathlib import Path
 from Config.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, OF_NAMES, TARGET_CSI,
                                     TARGET_PHI, TARGET_PSI, modello_rete, scaler_rete
                                     )
+
 # ============================================================
 # CONFIGURAZIONE
 # ============================================================
@@ -13,148 +14,257 @@ from Config.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS
 # Definisci il percorso assoluto della cartella Ambiente
 AMBIENTE_DIR = Path(__file__).parent.parent.resolve()
 
-# Percorsi assoluti
+# Percorsi assoluti (possono essere stringhe o dizionari)
 SURROGATE_MODEL_PATH = modello_rete
 SCALER_PATH = scaler_rete
 
 print(f"DEBUG: SURROGATE_MODEL_PATH = {SURROGATE_MODEL_PATH}")
-print(f"DEBUG: File esiste? {os.path.exists(SURROGATE_MODEL_PATH)}")
-print(f"DEBUG: SCALER_PATH = {SCALER_PATH}")
-print(f"DEBUG: File esiste? {os.path.exists(SCALER_PATH)}")
+if isinstance(SURROGATE_MODEL_PATH, dict):
+    for of_k, path_v in SURROGATE_MODEL_PATH.items():
+        print(f"  - Modello per {of_k} esiste? {os.path.exists(path_v)}")
+else:
+    print(f"DEBUG: File modello esiste? {os.path.exists(SURROGATE_MODEL_PATH)}")
 
+print(f"DEBUG: SCALER_PATH = {SCALER_PATH}")
+if isinstance(SCALER_PATH, dict):
+    for of_k, path_v in SCALER_PATH.items():
+        print(f"  - Scaler per {of_k} esiste? {os.path.exists(path_v)}")
+else:
+    print(f"DEBUG: File scaler esiste? {os.path.exists(SCALER_PATH)}")
 
 # -------------------------------------------------------
 # SELEZIONE DOF ATTIVI
-# Cambia questa lista per aggiungere DOF man mano
-# Es: [0]       → solo PITCH
-#     [0, 1]    → PITCH + BETA1
-#     list(range(7)) → tutti e 7
 # -------------------------------------------------------
-
-# Applica la selezione
 DOF_BOUNDS = [DOF_BOUNDS_ALL[i] for i in ACTIVE_DOF_INDICES]
 
-
-# Indice CSI — usato nella reward attuale
+# Indici delle Objective Functions
 IDX_CSI = OF_NAMES.index(TARGET_CSI)
 IDX_PSI = OF_NAMES.index(TARGET_PSI)
 IDX_PHI = OF_NAMES.index(TARGET_PHI)
 
-# Indici commentati — da attivare quando aggiungi compute_efficiency
-"""IDX_CPT = OF_NAMES.index("OF_Cpt")"""
-
 
 # ============================================================
-# CARICAMENTO SURROGATE KERAS
+# CARICAMENTO SURROGATE KERAS (Supporta Singolo e Multi-Modello)
 # ============================================================
 
-def load_surrogate(model_path=SURROGATE_MODEL_PATH,
-                   scaler_path=SCALER_PATH):
+def load_surrogate(model_path=SURROGATE_MODEL_PATH, scaler_path=SCALER_PATH):
     import tensorflow as tf
     import joblib
 
-    # CArica il modello surrogato (la rete neurale che ho addestrato)
-    print(f"\n  Caricamento surrogate: {model_path}")
-    keras_model = tf.keras.models.load_model(model_path)
+    # CONTROLLO ARCHITETTURA: Struttura Singola o Multi-Modello?
+    if not isinstance(model_path, dict):
+        # ============================================================
+        # STRUTTURA 1: VECCHIO MODO (Modello Unico)
+        # ============================================================
+        print(f"\n[INFO] Caricamento surrogate singolo standard: {model_path}")
+        keras_model = tf.keras.models.load_model(model_path)
 
-    # Carica il dizionario joblib con entrambi gli scaler
-    print(f"  Caricamento scaler: {scaler_path}")
-    scalers  = joblib.load(scaler_path)
-    scaler_X = scalers['scaler_X']   # per scalare i DOF in input
-    scaler_y = scalers['scaler_y']   # per de-scalare gli OF in output
+        print(f"  Caricamento scaler unico: {scaler_path}")
+        scalers = joblib.load(scaler_path)
+        scaler_X = scalers['scaler_X']
+        scaler_y = scalers['scaler_y']
 
-    # Converte i parametri dello scaler_X in costanti numpy
-    # per evitare overhead sklearn ad ogni chiamata
-    scaler_type = type(scaler_X).__name__
-    print(f"  Tipo scaler_X: {scaler_type}")
-    print(f"  Tipo scaler_y: {type(scaler_y).__name__}")
+        # Ottimizzazione numpy dei parametri dello scaler X
+        scaler_type = type(scaler_X).__name__
+        if scaler_type == "MinMaxScaler":
+            X_offset_ = scaler_X.data_min_.astype(np.float32)
+            X_scale_ = scaler_X.data_range_.astype(np.float32)
+            _scale_X = lambda x: (x - X_offset_) / (X_scale_ + 1e-8)
+        elif scaler_type == "StandardScaler":
+            X_offset_ = scaler_X.mean_.astype(np.float32)
+            X_scale_ = scaler_X.scale_.astype(np.float32)
+            _scale_X = lambda x: (x - X_offset_) / (X_scale_ + 1e-8)
+        else:
+            _scale_X = lambda x: scaler_X.transform(x.reshape(1, -1))[0].astype(np.float32)
 
-    # In base allo scaler che ho utilizzato, definisco funzioni di scaling e inverse scaling
-    if scaler_type == "MinMaxScaler":
-        # transform(x) = (x - data_min_) / data_range_
-        X_offset_ = scaler_X.data_min_.astype(np.float32)
-        X_scale_ = scaler_X.data_range_.astype(np.float32)
+        # Ottimizzazione numpy dei parametri dello scaler y
+        scaler_y_type = type(scaler_y).__name__
+        if scaler_y_type == "MinMaxScaler":
+            y_offset_ = scaler_y.data_min_.astype(np.float32)
+            y_scale_ = scaler_y.data_range_.astype(np.float32)
+            _inverse_scale_y = lambda y: y * y_scale_ + y_offset_
+        elif scaler_y_type == "StandardScaler":
+            y_offset_ = scaler_y.mean_.astype(np.float32)
+            y_scale_ = scaler_y.scale_.astype(np.float32)
+            _inverse_scale_y = lambda y: y * y_scale_ + y_offset_
+        else:
+            _inverse_scale_y = lambda y: scaler_y.inverse_transform(y.reshape(1, -1))[0].astype(np.float32)
 
-        def _scale_X(x):
-            return (x - X_offset_) / (X_scale_ + 1e-8)
+        @tf.function(input_signature=[
+            tf.TensorSpec(shape=[1, keras_model.input_shape[-1]], dtype=tf.float32)
+        ])
+        def fast_infer(x):
+            return keras_model(x, training=False)
 
-    elif scaler_type == "StandardScaler":
-        # transform(x) = (x - mean_) / scale_
-        X_offset_ = scaler_X.mean_.astype(np.float32)
-        X_scale_ = scaler_X.scale_.astype(np.float32)
+        def predict(dof_raw):
+            x_scaled = _scale_X(dof_raw.astype(np.float32))
+            x_tensor = x_scaled.reshape(1, -1).astype(np.float32)
+            of_scaled = fast_infer(tf.constant(x_tensor)).numpy()
+            of_real = _inverse_scale_y(of_scaled[0])
+            return of_real.astype(np.float32)
 
-        def _scale_X(x):
-            return (x - X_offset_) / (X_scale_ + 1e-8)
+        # Warm-up grafo TF
+        print("  Warm-up tf.function (Metamodello Singolo)...")
+        dummy = np.random.uniform(
+            np.array([b[0] for b in DOF_BOUNDS_ALL]),
+            np.array([b[1] for b in DOF_BOUNDS_ALL])
+        ).astype(np.float32)
+        predict(dummy)
+        return predict
+
+
 
     else:
-        # Fallback generico: usa sklearn direttamente
-        print(f"  Scaler non riconosciuto ({scaler_type}), uso sklearn.transform()")
+        # ============================================================
+        # STRUTTURA 2: NUOVO MODO (Multi-Modello Separato per OF)
+        # ============================================================
 
-        def _scale_X(x):
-            return scaler_X.transform(x.reshape(1, -1))[0].astype(np.float32)
+        print(f"\n[INFO] Rilevato assetto MULTI-MODELLO con scaler DOF unico. Inizializzazione...")
 
-    # Stessa logica per scaler_y (inverse transform)
-    scaler_y_type = type(scaler_y).__name__
-    if scaler_y_type == "MinMaxScaler":
-        y_offset_ = scaler_y.data_min_.astype(np.float32)
-        y_scale_ = scaler_y.data_range_.astype(np.float32)
+        import tensorflow as tf
+        import joblib
+        import pandas as pd  # Importiamo pandas per risolvere il problema dei nomi delle colonne
+        from Config.Set_input_param import DOF_NAMES_ALL  # Importiamo i nomi reali delle colonne dei DOF
 
-        def _inverse_scale_y(y):
-            return y * y_scale_ + y_offset_
+        # 1. Carichiamo lo scaler GLOBALE per i DOF (Input X)
+        if "X_GLOBAL" in scaler_path:
+            print(f"  -> Caricamento Scaler di Input Globale: {scaler_path['X_GLOBAL']}")
+            scaler_X_global = joblib.load(scaler_path["X_GLOBAL"])
 
-    elif scaler_y_type == "StandardScaler":
-        y_offset_ = scaler_y.mean_.astype(np.float32)
-        y_scale_ = scaler_y.scale_.astype(np.float32)
+            # Estraiamo automaticamente i nomi esatti delle colonne attesi dallo scaler
+            if hasattr(scaler_X_global, "feature_names_in_"):
+                colonne_attese_scaler = scaler_X_global.feature_names_in_
+                print(
+                    f"  [INFO] Nomi colonne estratti dallo scaler con successo ({len(colonne_attese_scaler)} feature).")
+            else:
+                # Fallback protettivo se la proprietà non esistesse (ma nel tuo ColumnTransformer c'è sicuramente)
+                from Config.Set_input_param import DOF_NAMES_ALL
+                colonne_attese_scaler = DOF_NAMES_ALL
 
-        def _inverse_scale_y(y):
-            return y * y_scale_ + y_offset_
+            # Funzione di scaling che impacchetta l'input con i nomi corretti richiesti dallo scaler
+            def _scale_x_with_df(x_numpy):
+                x_2d = x_numpy.reshape(1, -1)
+                # Creiamo il DataFrame usando i nomi esatti che lo scaler pretende di vedere
+                df_temp = pd.DataFrame(x_2d, columns=colonne_attese_scaler)
+                return scaler_X_global.transform(df_temp)[0].astype(np.float32)
 
-    else:
-        def _inverse_scale_y(y):
-            return scaler_y.inverse_transform(y.reshape(1, -1))[0].astype(np.float32)
+            _scale_x_global = _scale_x_with_df
+        else:
+            raise KeyError("Errore: Manca la chiave 'X_GLOBAL' in scaler_rete per caricare lo scaler_DOF.joblib")
 
-    # Compila il modello come funzione TF statica —
-    # la prima chiamata è lenta (compilazione), le successive veloci
-    @tf.function(input_signature=[
-        tf.TensorSpec(shape=[1, keras_model.input_shape[-1]], dtype=tf.float32)
-    ])
-    def fast_infer(x):
-        return keras_model(x, training=False)
+        of_predictors = {}
 
-    def predict(dof_raw):
-        """
-        dof_raw: np.array shape (7,) — DOF in unità fisiche reali
-        Restituisce: np.array shape (15,) — OF in unità fisiche reali
+        # Funzione helper per buildare la pipeline di ogni singola OF
 
-        Pipeline:
-            DOF grezzi
-              → normalizzazione (numpy, veloce)
-              → inferenza rete (tf.function, veloce)
-              → de-normalizzazione OF (numpy, veloce)
-              → OF in unità fisiche reali
-        """
-        # 1. Scala i DOF con i parametri estratti
-        x_scaled = _scale_X(dof_raw.astype(np.float32))
-        x_tensor = x_scaled.reshape(1, -1).astype(np.float32)
+        def build_single_of_pipeline(m_file, s_file):
+            # Usiamo tf.keras.models.load_model (standard di tensorflow)
+            k_model = tf.keras.models.load_model(m_file)
+            scaler_y = joblib.load(s_file)  # Questo è lo scaler specifico per l'output (es. scaler_CSI.joblib)
 
-        # 2. Inferenza veloce con tf.function
-        of_scaled = fast_infer(tf.constant(x_tensor)).numpy()
+            # Ottimizzazione numpy per l'inversione dell'output della singola OF
+            s_y_type = type(scaler_y).__name__
+            if s_y_type == "MinMaxScaler":
+                off_y = scaler_y.data_min_.astype(np.float32)
+                sc_y = scaler_y.data_range_.astype(np.float32)
+                _inv_scale_y_loc = lambda y: y * sc_y + off_y
+            elif s_y_type == "StandardScaler":
+                off_y = scaler_y.mean_.astype(np.float32)
+                sc_y = scaler_y.scale_.astype(np.float32)
+                _inv_scale_y_loc = lambda y: y * sc_y + off_y
+            else:
+                _inv_scale_y_loc = lambda y: scaler_y.inverse_transform(y.reshape(1, -1))[0].astype(np.float32)
+            @tf.function(input_signature=[
+                tf.TensorSpec(shape=[1, k_model.input_shape[-1]], dtype=tf.float32)
+            ])
+            def fast_infer_loc(x):
 
-        # 3. De-scala gli OF → valori fisici reali
-        of_real = _inverse_scale_y(of_scaled[0])
+                return k_model(x, training=False)
 
-        return of_real.astype(np.float32)
+            def predict_single_of(x_scaled_vector):
+                # Riceve il vettore X già scalato globalmente e lo passa alla rete
+                x_tensor = x_scaled_vector.reshape(1, -1).astype(np.float32)
+                pred_scaled = fast_infer_loc(tf.constant(x_tensor)).numpy()
 
-    # Warm-up: prima chiamata lenta (compilazione grafo TF)
-    print("  Warm-up tf.function (prima chiamata)...")
-    dummy_low = np.array([b[0] for b in DOF_BOUNDS_ALL], dtype=np.float32)
-    dummy_high = np.array([b[1] for b in DOF_BOUNDS_ALL], dtype=np.float32)
-    dummy = np.random.uniform(dummy_low, dummy_high).astype(np.float32)
-    predict(dummy)
-    print("  Surrogate pronta.\n")
+                # Applica l'inverse transform specifico per questa OF
+                pred_real = _inv_scale_y_loc(pred_scaled[0])
+                return pred_real.flatten()[0] if isinstance(pred_real, np.ndarray) else pred_real
 
-    return predict
+            return predict_single_of
 
+        # Istanziamo i modelli mappandoli sulle chiavi corrispondenti
+        for of_name in OF_NAMES:
+            # Rende il matching flessibile: es. se of_name è "OF_phi" o "PHI", cercherà "PHI" nel dizionario
+            matching_key = next(
+                (k for k in model_path.keys() if k.upper() in of_name.upper() or of_name.upper() in k.upper()), None)
+
+            if matching_key:
+                print(f"  -> Pipeline OF generata per {of_name} (Associata a chiave modello: {matching_key})")
+                of_predictors[of_name] = build_single_of_pipeline(model_path[matching_key], scaler_path[matching_key])
+            else:
+                # Se non trova una corrispondenza perfetta, proviamo a mappare PHI, PSI, CSI ovunque siano contenute
+                fallback_key = None
+                if "CSI" in of_name.upper():
+                    fallback_key = "CSI"
+                elif "CPT" in of_name.upper():
+                    fallback_key = "CPT"
+                elif "PSI" in of_name.upper():
+                    fallback_key = "PSI"
+                elif "PHI" in of_name.upper():
+                    fallback_key = "PHI"
+                elif "ALFA_EX" in of_name.upper():
+                    fallback_key = "ALFA_EX"
+                elif "AREA" in of_name.upper():
+                    fallback_key = "AREA"
+                elif "DFSS_MISS" in of_name.upper():
+                    fallback_key = "DFSS_MISS"
+                elif "DS_CP" in of_name.upper():
+                    fallback_key = "DS_CP"
+                elif "TMAX" in of_name.upper():
+                    fallback_key = "TMAX"
+                elif "XTMAX" in of_name.upper():
+                    fallback_key = "X_TMAX"
+                elif "UGT" in of_name.upper():
+                    fallback_key = "UGT"
+                elif "WEDGE" in of_name.upper():
+                    fallback_key = "WEDGE"
+                elif "ZWC" in of_name.upper():
+                    fallback_key = "ZWC"
+
+                if fallback_key and fallback_key in model_path:
+                    print(f"  -> [FALLBACK SUCCESSO] Pipeline OF generata per {of_name} usando modello {fallback_key}")
+                    of_predictors[of_name] = build_single_of_pipeline(model_path[fallback_key],
+                                                                      scaler_path[fallback_key])
+                else:
+                    print(f"  [AVVISO] Nessun modello trovato per {of_name}. Verrà restituito 0.0 di default.")
+
+        # Funzione di aggregazione finale eseguita a ogni step dell'ambiente RL
+        def predict_multi(dof_raw):
+            # 1. Scaliamo l'input una volta sola usando lo scaler globale DOF
+            x_input = dof_raw.astype(np.float32)
+            x_scaled = _scale_x_global(x_input)
+
+            # 2. Otteniamo le predizioni ciclando sulle OF
+            of_real_all = np.zeros(len(OF_NAMES), dtype=np.float32)
+            for i, of_name in enumerate(OF_NAMES):
+
+                if of_name in of_predictors:
+                    # Passiamo il vettore già scalato alla pipeline dell'OF
+                    of_real_all[i] = of_predictors[of_name](x_scaled)
+                else:
+                    of_real_all[i] = 0.0
+
+            return of_real_all
+
+        print("  Warm-up del grafo Multi-Modello strutturato...")
+        dummy = np.random.uniform(
+            np.array([b[0] for b in DOF_BOUNDS_ALL]),
+            np.array([b[1] for b in DOF_BOUNDS_ALL])
+        ).astype(np.float32)
+
+        predict_multi(dummy)
+        print("  Sistema Multi-Modello configurato con successo.\n")
+
+        return predict_multi
 
 
 # ============================================================
@@ -268,9 +378,8 @@ class BladeOptimEnv(gym.Env):
         super().__init__()
 
         self.use_delta = use_delta
+        self.surrogate = load_surrogate()
 
-
-        self.predict      = surrogate_fn
         self.start_dof    = start_dof
         self.ref_of = ref_of
         self.ep_length    = episode_length
@@ -330,7 +439,7 @@ class BladeOptimEnv(gym.Env):
         phi_curr = of_vals[IDX_PHI]
         psi_curr = of_vals[IDX_PSI]
 
-        errore_psi = abs(psi_curr - target_phi_val) / (abs(target_phi_val) + 1e-8)
+        errore_psi = abs(psi_curr - target_psi_val) / (abs(target_psi_val) + 1e-8)
         errore_phi = abs(phi_curr - target_phi_val) / (abs(target_phi_val) + 1e-8)
 
         error_array = np.array([errore_psi, errore_phi], dtype=np.float32)
@@ -363,7 +472,7 @@ class BladeOptimEnv(gym.Env):
         self.current_dof_active = self.current_dof_full[ACTIVE_DOF_INDICES].copy()
 
         # Valuta le performance (OF) di questo profilo iniziale tramite il metamodello Keras
-        self.current_of = self.predict(self.current_dof_full)
+        self.current_of = self.surrogate(self.current_dof_full)
         self.start_of = self.current_of.copy()
         self.step_count = 0
 
@@ -421,7 +530,7 @@ class BladeOptimEnv(gym.Env):
 
 
         # Valuta il nuovo profilo (surrogate riceve sempre tutti e 7 i DOF)
-        new_of = self.predict(new_dof_full).astype(np.float32)
+        new_of = self.surrogate(new_dof_full)
 
         tolleranza_target = 0.02  # 1% (scegli tu)
 

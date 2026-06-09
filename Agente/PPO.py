@@ -10,7 +10,7 @@ import glob
 from Ambiente.Ambiente import BladeOptimEnv
 from Config.Set_input_param import PPO_PARAMS, \
     TOTAL_TIMESTEPS, n_dof_totali, target_phi, target_psi, DOF_NAMES_ALL, OF_NAMES, ACTIVE_DOF_INDICES, early_stopping
-from Report.Plot import _plot_results, _plot_training_metrics_actor, _plot_training_metrics_critic, _plot_dof_evolution, _plot_dof_evolution_barre
+from Report.Plot import _plot_results, _plot_training_metrics_actor, _plot_training_metrics_critic, _plot_dof_evolution
 
 
 # ============================================================
@@ -224,9 +224,9 @@ def train(surrogate_fn,
         active_tag = "_".join(safe_names) if safe_names else "ALL"
 
         # --- percorsi dinamici per checkpoint, log e monitor ---
-        checkpoint_dir = f"./ppo_blade_generale_checkpoints_{active_tag}/"
-        log_dir = f"./ppo_blade_generale_logs_{active_tag}/"
-        monitor_file = f"./ppo_blade_generale_monitor_{active_tag}"
+        checkpoint_dir = f"./ppo_blade_task1_checkpoints/"
+        log_dir = f"./ppo_blade_task1_logs/"
+        monitor_file = f"./ppo_blade_generale_monitor"
     else:
         import re
         active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
@@ -234,9 +234,9 @@ def train(surrogate_fn,
         active_tag = "_".join(safe_names) if safe_names else "ALL"
 
         # --- percorsi dinamici per checkpoint, log e monitor ---
-        checkpoint_dir = f"./ppo_blade_start_profile_checkpoints_{active_tag}/"
-        log_dir = f"./ppo_blade_start_profile_logs_{active_tag}/"
-        monitor_file = f"./ppo_blade_start_profile_monitor_{active_tag}"
+        checkpoint_dir = f"./ppo_blade_task2_checkpoints/"
+        log_dir = f"./ppo_blade_task2_logs/"
+        monitor_file = f"./ppo_blade_start_profile_monitor"
 
         # Crea le directory se non esistono
         import os
@@ -286,9 +286,9 @@ def train(surrogate_fn,
         safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
         active_tag = "_".join(safe_names) if safe_names else "ALL"
         if use_delta == True:
-            model_basename = f"ppo_task1_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_con_delta"
+            model_basename = f"ppo_task1_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_con_delta"
         else:
-            model_basename = f"ppo_task1_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_senza_delta"
+            model_basename = f"ppo_task1_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_senza_delta"
         model_path = os.path.join("Risultati", "Modelli", model_basename)  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
@@ -311,9 +311,9 @@ def train(surrogate_fn,
         safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
         active_tag = "_".join(safe_names) if safe_names else "ALL"
         if use_delta == True:
-            model_basename = f"ppo_task2_use_delta_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
+            model_basename = f"ppo_task2_use_delta_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
         else:
-            model_basename = f"ppo_task2_no_use_delta_con_phi_psi_uguali_{active_tag}_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
+            model_basename = f"ppo_task2_no_use_delta_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
         model_path = os.path.join("Risultati", "Modelli", model_basename)  # SB3 aggiunge .zip se serve
 
         print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
@@ -339,7 +339,6 @@ def train(surrogate_fn,
     _plot_training_metrics_actor(cb_blade, learning_rate, n_steps)
     _plot_training_metrics_critic(cb_blade, learning_rate, n_steps)
     _plot_dof_evolution(cb_blade, learning_rate, n_steps, start_dof=start_dof)
-    _plot_dof_evolution_barre(cb_blade, learning_rate, n_steps, start_dof=start_dof)
 
     env.close()
 
@@ -364,7 +363,7 @@ def _print_results(cb: BladeCallback):
 
 
 
-def pulisci_file_temporanei():
+def pulisci_file_temporanei(task_1=False):
     """Elimina log, immagini temporanee e checkpoint, mantenendo solo Modelli e PPTX."""
     print("\n" + "=" * 60)
     print("  PULIZIA FILE TEMPORANEI")
@@ -374,7 +373,8 @@ def pulisci_file_temporanei():
     immagini = ["plot_results.png", "plot_metrics_actor.png", "plot_metrics_critic.png","plot_dof_evolution_barre.png",
                 "plot_dof_evolution.png", "smith_diagram_action_assiale.png",
                 "smith_diagram_action_total_to_total.png",
-                "smith_diagram_reaction_total_to_total.png","smith_diagram_reaction_ZOOM.png"
+                "smith_diagram_reaction_total_to_total.png","smith_diagram_reaction_ZOOM.png", "plot_dof_evolution_1.png",
+                "plot_dof_evolution_2.png", "plot_dof_evolution_3.png"
                 ]
     for img in immagini:
         if os.path.exists(img):
@@ -386,15 +386,17 @@ def pulisci_file_temporanei():
         os.remove(monitor_file)
         print(f"  [X] Eliminato: {monitor_file}")
 
-    os.remove("task1_results.csv")
+    if task_1 == True:
+        os.remove("task1_results.csv")
+
 
     # 3. Elimina le cartelle di Checkpoint e Log di TensorBoard
     # Trova tutte le cartelle che corrispondono a questi pattern
     cartelle_da_eliminare = [
         "ppo_blade_checkpoints",  # Quella hardcoded di base
     ]
-    cartelle_da_eliminare.extend(glob.glob("ppo_blade_*_checkpoints_*"))
-    cartelle_da_eliminare.extend(glob.glob("ppo_blade_*_logs_*"))
+    cartelle_da_eliminare.extend(glob.glob("ppo_blade_*_checkpoints*"))
+    cartelle_da_eliminare.extend(glob.glob("ppo_blade_*_logs*"))
 
     for cartella in cartelle_da_eliminare:
         if os.path.exists(cartella) and os.path.isdir(cartella):

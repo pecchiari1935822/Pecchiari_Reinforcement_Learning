@@ -5,7 +5,6 @@ from Config.Set_input_param import PPO_PARAMS
 
 
 
-
 def slide_iniziali_task_1(prs):
     slide_layout_intro = prs.slide_layouts[0]
     slide_intro = prs.slides.add_slide(slide_layout_intro)
@@ -71,7 +70,8 @@ def slide_iniziali_task_2(prs, row_idx, active_dof):
                 else:
                     run.text = f"{key} = {value}"
 
-def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, best_of,start_dof, start_of):
+def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, best_of,
+                              start_dof, start_of, alpha_ex_ottimale, alpha_in_ottimale, beta_1_ottimale, beta_2_ottimale):
     """
     Aggiunge 4 slide alla presentazione: 1 di testo e 3 di immagini.
     """
@@ -138,29 +138,37 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
     except:
         slide_layout_img = prs.slide_layouts[1]  # Fallback
 
-    titoli_immagini = ["Risultati","Andamento Valore Miglior DOF per episodio", "Andamento Valore Miglior DOF per episodio", "Metriche Attore", "Metriche Critico"]  # Layout Solo Titolo o Vuota
-    for idx, img_path in enumerate(img_paths):
-        if not os.path.exists(img_path):
-            continue
+    titoli_immagini = ["Risultati","Andamento Valore Miglior DOF per episodio", "Metriche Attore", "Metriche Critico"]  # Layout Solo Titolo o Vuota
+    for path in img_paths:
+        if not os.path.exists(path): continue
 
-        slide_img = prs.slides.add_slide(slide_layout_img)
+        slide = prs.slides.add_slide(prs.slide_layouts[4])  # Layout solo titolo
 
-        if slide_img.shapes.title:
-            slide_img.shapes.title.text = f"{titoli_immagini[idx]}"
-
-        # Inserisci immagine centrata (adattata per 16:9)
-        # Una slide 16:9 tipica è larga 13.33 pollici e alta 7.5 pollici
-        if idx == 0 or idx == 4:
+        # Assegna il titolo in base al nome del file
+        if "results" in path:
+            slide.shapes.title.text = "Risultati Training"
             left = Inches(1)
             top = Inches(1.5)
             width = Inches(11.33)  # Lascia 1 pollice di margine per lato
-            slide_img.shapes.add_picture(str(img_path), left, top, width=width)
-        else:
+            slide.shapes.add_picture(str(path), left, top, width=width)
+        elif "dof_evolution" in path:
+            slide.shapes.title.text = f"Evoluzione DOF - {path.split('_')[-1].replace('.png', '')}"
             left = Inches(1)
             top = Inches(1.1)
-            heigh = Inches(5.9)  # Lascia 1 pollice di margine per lato
-            slide_img.shapes.add_picture(str(img_path), left, top, height=heigh)
-
+            height = Inches(5.9)  # Lascia 1 pollice di margine per lato
+            slide.shapes.add_picture(str(path), left, top, height=height)
+        elif "actor" in path:
+            slide.shapes.title.text = "Metriche Actor"
+            left = Inches(1)
+            top = Inches(1.1)
+            height = Inches(5.9)  # Lascia 1 pollice di margine per lato
+            slide.shapes.add_picture(str(path), left, top, height=height)
+        elif "critic" in path:
+            slide.shapes.title.text = "Metriche Critic"
+            left = Inches(1)
+            top = Inches(1.5)
+            width = Inches(11.33)  # Lascia 1 pollice di margine per lato
+            slide.shapes.add_picture(str(path), left, top, width=width)
 
 
     slide_layout_best = prs.slide_layouts[5]
@@ -207,17 +215,17 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
         try:
             # === RECUPERA I VALORI PER I CALCOLI ===
             # Esempio: OF_alfa_ex_OP_01 è il nome usato nel DB per l'angolo di uscita, lo recupero in best_of
-            idx_alpha_ex = OF_NAMES.index("OF_alfa_ex")
-            alpha_ex_deg = best_of[idx_alpha_ex]
+
+            alpha_ex_deg = alpha_ex_ottimale
 
             # alpha0 fisso a 10 gradi come avevi già scritto
-            alpha0_deg = 10.0
+            alpha0_deg = alpha_in_ottimale
 
             idx_beta1 = DOF_NAMES_ALL.index("DOF_BETA1")  # o DOF_BETA1_GEOM_ se usi quest'ultimo
             idx_beta2 = DOF_NAMES_ALL.index("DOF_BETA2")  # o DOF_BETA2_GEOM_
 
-            beta1_deg = best_dof[idx_beta1]
-            beta2_deg = best_dof[idx_beta2]
+            beta1_deg = beta_1_ottimale
+            beta2_deg = beta_2_ottimale
 
             # === CALCOLI ===
             # Deflessione = alpha_0 - alpha_ex (presumo in gradi)
@@ -230,9 +238,7 @@ def aggiungi_slide_iterazione(prs, parametri, img_paths, row_idx, lr, best_dof, 
             # (baseline o task1, il codice per aggiungere è lo stesso)
 
             # Stampa preesistente alpha0
-            p = tf_sin_best.add_paragraph()
-            p.text = f"ALPHA_0 = {alpha0_deg:.3f}°"
-            p.level = 0
+
 
             # Stampa Deflessione
             p_defl = tf_sin_best.add_paragraph()
