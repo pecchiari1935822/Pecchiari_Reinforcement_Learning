@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
 
 
@@ -49,6 +49,58 @@ plt.show()
 X_compl = df_cleaned_compl[dof_columns].values  # è una lista formata da 922 liste che all'interno contengono 7 valori (input = feature) (DOF1, DOF2, DOF3, DOF4, DOF5, DOF6, DOF7)
 y_compl = df_cleaned_compl[of_columns].values   # è una lista formata da 922 liste che all'interno contengono 15 valori (output = target) (OF1, OF2, OF3, OF4, OF5, OF6, OF7, OF8, OF9, OF10, OF11, OF12, OF13, OF14, OF15)
 
+# ================================================================================================================
+# ANALISI DISTRIBUZIONE E OUTLIER DELLE OF (SENZA RIMOZIONE)
+# ================================================================================================================
+import seaborn as sns
+
+
+def analizza_distribuzione_of(df_sorgente, colonne_of):
+    n_of = len(colonne_of)
+    # Calcola dinamicamente quante righe servono per i grafici (es. 4 colonne per riga)
+    cols_per_row = 4
+    rows = int(np.ceil(n_of / cols_per_row))
+
+    # 1. GRAFICO 1: IStogrammi (per vedere la forma della distribuzione)
+    fig, axes = plt.subplots(rows, cols_per_row, figsize=(18, rows * 3.5))
+    axes = axes.flatten()
+
+    for i, col in enumerate(colonne_of):
+        sns.histplot(data=df_sorgente, x=col, kde=True, ax=axes[i], color='#3498db', alpha=0.7)
+        axes[i].set_title(f'Istogramma {col}', fontsize=11, fontweight='bold')
+        axes[i].set_xlabel('')
+        axes[i].grid(True, alpha=0.3)
+
+    # Rimuove i sotto-grafici vuoti se avanzano spazi
+    for j in range(n_of, len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.suptitle('Distribuzione delle OF (Dati Grezzi Completi)', fontsize=16, fontweight='bold', y=0.99)
+    plt.tight_layout()
+    plt.show()
+
+    # 2. GRAFICO 2: Boxplot (FONDAMENTALE per decidere lo Scaler!)
+    fig, axes = plt.subplots(rows, cols_per_row, figsize=(18, rows * 3.5))
+    axes = axes.flatten()
+
+    for i, col in enumerate(colonne_of):
+        sns.boxplot(data=df_sorgente, y=col, ax=axes[i], color='#e74c3c', width=0.4)
+        axes[i].set_title(f'Boxplot {col}', fontsize=11, fontweight='bold')
+        axes[i].set_ylabel('')
+        axes[i].grid(True, alpha=0.3)
+
+    for j in range(n_of, len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.suptitle('Rilevamento Outlier nelle OF (Dati Grezzi Completi)', fontsize=16, fontweight='bold', y=0.99)
+    plt.tight_layout()
+    plt.show()
+
+
+# Richiamo della funzione usando il dataframe pulito dai NaN ma PRIMA dei tagli IQR
+analizza_distribuzione_of(df_cleaned_compl, of_columns)
+
+
 #Divisione del dataset in training e test set (80% train, 20% test)
 # Primo split: 70% train, 30% temp
 X_train_compl, X_temp_compl, y_train_compl, y_temp_compl = train_test_split(X_compl, y_compl, test_size=0.3, random_state=42)
@@ -57,8 +109,8 @@ X_train_compl, X_temp_compl, y_train_compl, y_temp_compl = train_test_split(X_co
 X_val_compl, X_test_compl, y_val_compl, y_test_compl = train_test_split(X_temp_compl, y_temp_compl, test_size=0.5, random_state=42)
 
 # Creiamo gli scaler, standardizzazione Z-score
-scaler_X = StandardScaler()
-scaler_y = StandardScaler()
+scaler_X = MinMaxScaler()
+scaler_y = MinMaxScaler()
 
 # REGOLA D'ORO: fit_transform SOLO sul dataset di addestramento
 X_scaled_compl = scaler_X.fit_transform(X_train_compl)
@@ -122,7 +174,7 @@ print(f"\n Colonne OF (OUTPUT - {len(of_columns)}):")
 print(of_columns)
 
 # Matrice di correlazione prima della rimozione degli outlier
-cols_to_remove = list(df_cleaned.columns[:2])
+cols_to_remove = list(df_cleaned.columns[:1])
 
 df_reduced = df_cleaned.drop(columns=cols_to_remove, errors='ignore')
 
@@ -221,8 +273,8 @@ X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_
 X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
 # Creiamo gli scaler, standardizzazione Z-score
-scaler_X = StandardScaler()
-scaler_y = StandardScaler()
+scaler_X = MinMaxScaler()
+scaler_y = MinMaxScaler()
 
 # REGOLA D'ORO: fit_transform SOLO sul dataset di addestramento
 X_scaled = scaler_X.fit_transform(X_train)

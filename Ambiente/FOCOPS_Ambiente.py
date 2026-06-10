@@ -4,7 +4,7 @@ import gymnasium as gym
 from gymnasium import spaces
 from pathlib import Path
 from Config.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, OF_NAMES, TARGET_CSI,
-                                    TARGET_PHI, TARGET_PSI, modello_rete, scaler_rete
+                                    TARGET_PHI, TARGET_PSI, modello_rete, scaler_rete, tolleranza_profilo_partenza, tolleranza_phi_psi_imposti
                                     )
 
 # ============================================================
@@ -131,6 +131,7 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH, scaler_path=SCALER_PATH):
             print(f"  -> Caricamento Scaler di Input Globale: {scaler_path['X_GLOBAL']}")
             scaler_X_global = joblib.load(scaler_path["X_GLOBAL"])
 
+
             # Estraiamo automaticamente i nomi esatti delle colonne attesi dallo scaler
             if hasattr(scaler_X_global, "feature_names_in_"):
                 colonne_attese_scaler = scaler_X_global.feature_names_in_
@@ -142,131 +143,138 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH, scaler_path=SCALER_PATH):
                 colonne_attese_scaler = DOF_NAMES_ALL
 
             # Funzione di scaling che impacchetta l'input con i nomi corretti richiesti dallo scaler
-            def _scale_x_with_df(x_numpy):
-                x_2d = x_numpy.reshape(1, -1)
-                # Creiamo il DataFrame usando i nomi esatti che lo scaler pretende di vedere
-                df_temp = pd.DataFrame(x_2d, columns=colonne_attese_scaler)
-                return scaler_X_global.transform(df_temp)[0].astype(np.float32)
+            scaler_type = type(scaler_X_global).__name__
 
-            _scale_x_global = _scale_x_with_df
+            if scaler_type == "MinMaxScaler":
+                X_offset_ = scaler_X_global.data_min_.astype(np.float32)
+                X_scale_ = scaler_X_global.data_range_.astype(np.float32)
+                _scale_x_global = lambda x: (x.astype(np.float32) - X_offset_) / (X_scale_ + 1e-8)
+
+            elif scaler_type == "StandardScaler":
+                X_offset_ = scaler_X_global.mean_.astype(np.float32)
+                X_scale_ = scaler_X_global.scale_.astype(np.float32)
+                _scale_x_global = lambda x: (x.astype(np.float32) - X_offset_) / (X_scale_ + 1e-8)
+
+            elif scaler_type == "ColumnTransformer":
+                # Ogni step è una Pipeline con un MinMaxScaler/StandardScaler interno.
+                # Ricostruiamo i vettori offset e scale nell'ordine dei transformers.
+                offsets = []
+                scales = []
+                for step_name, pipeline, cols in scaler_X_global.transformers_:
+                    if step_name == "remainder":
+                        continue
+                    # Estrai il sotto-scaler dalla Pipeline (l'ultimo step)
+                    inner = pipeline.steps[-1][1] if hasattr(pipeline, "steps") else pipeline
+                    inner_type = type(inner).__name__
+                    if inner_type == "MinMaxScaler":
+                        offsets.append(inner.data_min_[0])
+                        scales.append(inner.data_range_[0])
+                    elif inner_type == "StandardScaler":
+                        offsets.append(inner.mean_[0])
+                        scales.append(inner.scale_[0])
+                    else:
+                        raise ValueError(f"Scaler interno non supportato: {inner_type} nello step '{step_name}'")
+
+                X_offset_ = np.array(offsets, dtype=np.float32)
+                X_scale_ = np.array(scales, dtype=np.float32)
+                _scale_x_global = lambda x: (x.astype(np.float32) - X_offset_) / (X_scale_ + 1e-8)
+
+            else:
+                # Fallback con DataFrame (lento ma funziona)
+                col_names = list(colonne_attese_scaler)
+                _scale_x_global = lambda x: scaler_X_global.transform(
+                    pd.DataFrame(x.reshape(1, -1), columns=col_names)
+                )[0].astype(np.float32)
         else:
             raise KeyError("Errore: Manca la chiave 'X_GLOBAL' in scaler_rete per caricare lo scaler_DOF.joblib")
 
-        of_predictors = {}
+        # Raccoglie modelli e parametri scaler nell'ordine di OF_NAMES
+        keras_models_list = []
+        inv_off_list = []
+        inv_sc_list = []
 
-        # Funzione helper per buildare la pipeline di ogni singola OF
-
-        def build_single_of_pipeline(m_file, s_file):
-            # Usiamo tf.keras.models.load_model (standard di tensorflow)
-            k_model = tf.keras.models.load_model(m_file)
-            scaler_y = joblib.load(s_file)  # Questo è lo scaler specifico per l'output (es. scaler_CSI.joblib)
-
-            # Ottimizzazione numpy per l'inversione dell'output della singola OF
-            s_y_type = type(scaler_y).__name__
-            if s_y_type == "MinMaxScaler":
-                off_y = scaler_y.data_min_.astype(np.float32)
-                sc_y = scaler_y.data_range_.astype(np.float32)
-                _inv_scale_y_loc = lambda y: y * sc_y + off_y
-            elif s_y_type == "StandardScaler":
-                off_y = scaler_y.mean_.astype(np.float32)
-                sc_y = scaler_y.scale_.astype(np.float32)
-                _inv_scale_y_loc = lambda y: y * sc_y + off_y
-            else:
-                _inv_scale_y_loc = lambda y: scaler_y.inverse_transform(y.reshape(1, -1))[0].astype(np.float32)
-            @tf.function(input_signature=[
-                tf.TensorSpec(shape=[1, k_model.input_shape[-1]], dtype=tf.float32)
-            ])
-            def fast_infer_loc(x):
-
-                return k_model(x, training=False)
-
-            def predict_single_of(x_scaled_vector):
-                # Riceve il vettore X già scalato globalmente e lo passa alla rete
-                x_tensor = x_scaled_vector.reshape(1, -1).astype(np.float32)
-                pred_scaled = fast_infer_loc(tf.constant(x_tensor)).numpy()
-
-                # Applica l'inverse transform specifico per questa OF
-                pred_real = _inv_scale_y_loc(pred_scaled[0])
-                return pred_real.flatten()[0] if isinstance(pred_real, np.ndarray) else pred_real
-
-            return predict_single_of
-
-        # Istanziamo i modelli mappandoli sulle chiavi corrispondenti
         for of_name in OF_NAMES:
-            # Rende il matching flessibile: es. se of_name è "OF_phi" o "PHI", cercherà "PHI" nel dizionario
             matching_key = next(
-                (k for k in model_path.keys() if k.upper() in of_name.upper() or of_name.upper() in k.upper()), None)
+                (k for k in model_path.keys() if k.upper() in of_name.upper() or of_name.upper() in k.upper()),
+                None)
+
+            if not matching_key:
+                for kw, mk in [("CSI", "CSI"), ("CPT", "CPT"), ("PSI", "PSI"), ("PHI", "PHI"),
+                               ("ALFA_EX", "ALFA_EX"), ("AREA", "Area"), ("DFSS_MIS", "DFSS_MIS"),
+                               ("DS_CP", "DS_CP"), ("TMAX", "TMAX"), ("X_TMAX", "X_TMAX"),
+                               ("WEDGE", "WEDGE_TE"), ("UGT", "UGT"), ("ZWC", "ZWC")]:
+                    if kw in of_name.upper() and mk in model_path:
+                        matching_key = mk
+                        break
 
             if matching_key:
-                print(f"  -> Pipeline OF generata per {of_name} (Associata a chiave modello: {matching_key})")
-                of_predictors[of_name] = build_single_of_pipeline(model_path[matching_key], scaler_path[matching_key])
+                print(f"  -> Caricamento modello per {of_name} (chiave: {matching_key})")
+                k_model = tf.keras.models.load_model(model_path[matching_key])
+                scaler_y = joblib.load(scaler_path[matching_key])
+
+                s_y_type = type(scaler_y).__name__
+                if s_y_type == "Pipeline":
+                    inner_scaler_y = scaler_y.steps[-1][1]
+                    s_y_type = type(inner_scaler_y).__name__
+                else:
+                    inner_scaler_y = scaler_y
+
+                if s_y_type == "MinMaxScaler":
+                    off_y = float(inner_scaler_y.data_min_[0])
+                    sc_y = float(inner_scaler_y.data_range_[0])
+                elif s_y_type == "StandardScaler":
+                    off_y = float(inner_scaler_y.mean_[0])
+                    sc_y = float(inner_scaler_y.scale_[0])
+                else:
+                    off_y, sc_y = 0.0, 1.0
+
+                keras_models_list.append(k_model)
+                inv_off_list.append(off_y)
+                inv_sc_list.append(sc_y)
             else:
-                # Se non trova una corrispondenza perfetta, proviamo a mappare PHI, PSI, CSI ovunque siano contenute
-                fallback_key = None
-                if "CSI" in of_name.upper():
-                    fallback_key = "CSI"
-                elif "CPT" in of_name.upper():
-                    fallback_key = "CPT"
-                elif "PSI" in of_name.upper():
-                    fallback_key = "PSI"
-                elif "PHI" in of_name.upper():
-                    fallback_key = "PHI"
-                elif "ALFA_EX" in of_name.upper():
-                    fallback_key = "ALFA_EX"
-                elif "AREA" in of_name.upper():
-                    fallback_key = "AREA"
-                elif "DFSS_MISS" in of_name.upper():
-                    fallback_key = "DFSS_MISS"
-                elif "DS_CP" in of_name.upper():
-                    fallback_key = "DS_CP"
-                elif "TMAX" in of_name.upper():
-                    fallback_key = "TMAX"
-                elif "XTMAX" in of_name.upper():
-                    fallback_key = "X_TMAX"
-                elif "UGT" in of_name.upper():
-                    fallback_key = "UGT"
-                elif "WEDGE" in of_name.upper():
-                    fallback_key = "WEDGE"
-                elif "ZWC" in of_name.upper():
-                    fallback_key = "ZWC"
+                print(f"  [AVVISO] Nessun modello per {of_name}, output = 0.0")
+                keras_models_list.append(None)
+                inv_off_list.append(0.0)
+                inv_sc_list.append(1.0)
 
-                if fallback_key and fallback_key in model_path:
-                    print(f"  -> [FALLBACK SUCCESSO] Pipeline OF generata per {of_name} usando modello {fallback_key}")
-                    of_predictors[of_name] = build_single_of_pipeline(model_path[fallback_key],
-                                                                      scaler_path[fallback_key])
-                else:
-                    print(f"  [AVVISO] Nessun modello trovato per {of_name}. Verrà restituito 0.0 di default.")
+        # Tensori costanti per l'inverse scaling
+        inv_off_array = np.array(inv_off_list, dtype=np.float32)
+        inv_sc_array = np.array(inv_sc_list, dtype=np.float32)
 
-        # Funzione di aggregazione finale eseguita a ogni step dell'ambiente RL
+        # Indici e modelli validi (quelli che hanno un modello associato)
+        valid_indices = [i for i, m in enumerate(keras_models_list) if m is not None]
+        valid_models = [keras_models_list[i] for i in valid_indices]
+
+        # Unico grafo TF che esegue tutti i modelli in sequenza con una sola chiamata
+        @tf.function(input_signature=[
+            tf.TensorSpec(shape=[1, len(DOF_BOUNDS_ALL)], dtype=tf.float32)
+        ])
+        def fast_infer_all(x):
+            results = tf.zeros([len(OF_NAMES)], dtype=tf.float32)
+            for i, model in zip(valid_indices, valid_models):
+                pred = model(x, training=False)
+                results = tf.tensor_scatter_nd_update(results, [[i]], tf.reshape(pred, [1]))
+            return results
+
         def predict_multi(dof_raw):
-            # 1. Scaliamo l'input una volta sola usando lo scaler globale DOF
-            x_input = dof_raw.astype(np.float32)
-            x_scaled = _scale_x_global(x_input)
+            x_scaled = _scale_x_global(dof_raw.astype(np.float32))
+            x_tensor = tf.constant(x_scaled.reshape(1, -1), dtype=tf.float32)
+            of_scaled = fast_infer_all(x_tensor).numpy()
+            of_real = of_scaled * inv_sc_array + inv_off_array
+            return of_real.astype(np.float32)
 
-            # 2. Otteniamo le predizioni ciclando sulle OF
-            of_real_all = np.zeros(len(OF_NAMES), dtype=np.float32)
-            for i, of_name in enumerate(OF_NAMES):
-
-                if of_name in of_predictors:
-                    # Passiamo il vettore già scalato alla pipeline dell'OF
-                    of_real_all[i] = of_predictors[of_name](x_scaled)
-                else:
-                    of_real_all[i] = 0.0
-
-            return of_real_all
-
-        print("  Warm-up del grafo Multi-Modello strutturato...")
+        # Warm-up
+        print("  Warm-up del grafo Multi-Modello unificato...")
         dummy = np.random.uniform(
             np.array([b[0] for b in DOF_BOUNDS_ALL]),
             np.array([b[1] for b in DOF_BOUNDS_ALL])
         ).astype(np.float32)
-
         predict_multi(dummy)
         print("  Sistema Multi-Modello configurato con successo.\n")
 
         return predict_multi
 
-
+surrogate = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
 # ============================================================
 # FUNZIONE DI REWARD
 # ============================================================
@@ -290,36 +298,13 @@ def compute_reward(of_current, of_previous, of_start, tolleranza=None):
     psi_curr = of_current[IDX_PSI]
     psi_prev = of_previous[IDX_PSI]
 
-
     # Variabili per ottimizzare l'efficienza
     eta_curr = psi_curr / (1+csi_curr)
     eta_prev = psi_prev / (1+csi_prev)
 
-    # Variabili per la penalizzazione se phi o psi cambiano più di un tot %
-    psi_start = of_start[IDX_PSI]
-    phi_start = of_start[IDX_PHI]
-    phi_curr = of_current[IDX_PHI]
-
-    errore_psi = abs(psi_curr - psi_start) / abs((psi_start) + 1e-8)
-
-
-    errore_phi = abs(phi_curr - phi_start) / abs((phi_start) + 1e-8)
-
-    penalty = 0.0
-    if errore_psi > tolleranza:
-        # Penalità quadratica: se sgarri di poco, la penalità è minima. Se sgarri di tanto, esplode.
-        penalty += 50.0 * ((errore_psi - tolleranza) ** 2)
-
-    if errore_phi > tolleranza:
-        penalty += 50.0 * ((errore_phi - tolleranza) ** 2)
-
     reward_csi = float(csi_prev - csi_curr)
 
-    # Rcompensa per l'ottimizzazione dell'efficienza
-    # return float (eta_curr - eta_prev)
-
-    # Ricompensa per l'ottimizzazione delle perdite con la penalità
-    return reward_csi - penalty
+    return reward_csi
 
 def compute_reward_target(
     of_current,
@@ -341,87 +326,73 @@ def compute_reward_target(
     csi_curr = float(of_current[IDX_CSI])
     csi_prev = float(of_previous[IDX_CSI])
 
-    phi_curr = float(of_current[IDX_PHI])
-    psi_curr = float(of_current[IDX_PSI])
-
-    # errori relativi rispetto ai TARGET
-    e_phi = abs(phi_curr - phi_target) / (abs(phi_target) + 1e-8)
-    e_psi = abs(psi_curr - psi_target) / (abs(psi_target) + 1e-8)
-
-    penalty = 0.0
-    if e_phi > tol_rel:
-        penalty += 50.0 * ((e_phi - tol_rel)**2)
-    if e_psi > tol_rel:
-        penalty += 50.0 * ((e_psi - tol_rel)**2)
 
     reward_csi = csi_prev - csi_curr
-    return float(reward_csi - penalty)
+    return reward_csi
 
 # ============================================================
 # AMBIENTE GYMNASIUM CUSTOM
 # ============================================================
 
+# ============================================================
+# AMBIENTE GYMNASIUM CUSTOM CON SUPPORTO SAFE RL (OMNISAFE)
+# ============================================================
+
 class BladeOptimEnv(gym.Env):
     """
-    Ambiente Gymnasium per l'ottimizzazione del profilo palare.
-
-    STRUTTURA ATTUALE (1 DOF attivo):
-      Stato  : [DOF_PITCH normalizzato (1)] + [15 OF] = 16 valori
-      Azione : [delta PITCH] = 1 valore in [-1, +1]
-      Reward : CSI_prev - CSI_curr  (minimizza perdite comprimibili)"""
-
+    Ambiente Gymnasium per l'ottimizzazione del profilo palare adattato per Safe RL.
+    Mantiene il tracciamento globale del miglior profilo tramite attributi di classe.
+    """
     metadata = {"render_modes": ["human"]}
 
-    def __init__(self, surrogate_fn, start_dof=None,
+    # Variabili di classe globali per estrarre il profilo migliore a fine run
+    best_csi = np.inf
+    best_dof = None
+    best_of = None
+
+    def __init__(self, start_dof=None,
                  action_scale=ACTION_SCALE, use_delta=False, episode_length=None,
                  target_phi=None, target_psi=None, ref_of=None):
         super().__init__()
 
         self.use_delta = use_delta
-        self.surrogate = load_surrogate()
+        self.surrogate = surrogate
 
-        self.start_dof    = start_dof
+        self.start_dof = start_dof
         self.ref_of = ref_of
-        self.ep_length    = episode_length
+        self.ep_length = episode_length
         self.action_scale = action_scale
 
         self.target_phi = target_phi
         self.target_psi = target_psi
 
-        n_active_dof = len(DOF_BOUNDS)          # DOF che l'agente può modificare
-        n_of         = len(OF_NAMES)             # 15 OF prodotti dalla surrogate
+        n_active_dof = len(DOF_BOUNDS)
+        n_of = len(OF_NAMES)
 
-        # Bounds solo per i DOF attivi
-        self.dof_low   = np.array([b[0] for b in DOF_BOUNDS], dtype=np.float32)
-        self.dof_high  = np.array([b[1] for b in DOF_BOUNDS], dtype=np.float32)
+        self.dof_low = np.array([b[0] for b in DOF_BOUNDS], dtype=np.float32)
+        self.dof_high = np.array([b[1] for b in DOF_BOUNDS], dtype=np.float32)
         self.dof_range = self.dof_high - self.dof_low
 
-        # Bounds per tutti e 7 i DOF (per campionare i DOF fissi all'inizio)
-        self.dof_low_all  = np.array([b[0] for b in DOF_BOUNDS_ALL], dtype=np.float32)
+        self.dof_low_all = np.array([b[0] for b in DOF_BOUNDS_ALL], dtype=np.float32)
         self.dof_high_all = np.array([b[1] for b in DOF_BOUNDS_ALL], dtype=np.float32)
 
-        # --- SPAZIO AZIONI ---
-        # Solo i DOF attivi: ogni valore in [-1, +1]
         self.action_space = spaces.Box(
             low=-1.0, high=1.0,
             shape=(n_active_dof,),
             dtype=np.float32
         )
 
-        # --- SPAZIO OSSERVAZIONI ---
-        # DOF attivi normalizzati [0,1] + tutti i 15 OF
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
-            shape=(n_active_dof + n_of+4,),
+            shape=(n_active_dof + n_of + 4,),
             dtype=np.float32
         )
 
-        # Stato interno
-        self.current_dof_active = None   # solo i DOF che l'agente modifica
-        self.current_dof_full   = None   # tutti e 7 i DOF (per la surrogate)
-        self.current_of         = None
-        self.start_of           = None
-        self.step_count         = 0
+        self.current_dof_active = None
+        self.current_dof_full = None
+        self.current_of = None
+        self.start_of = None
+        self.step_count = 0
 
     def _build_obs(self, dof_active, of_vals):
         dof_norm = (dof_active - self.dof_low) / (self.dof_range + 1e-8)
@@ -430,7 +401,6 @@ class BladeOptimEnv(gym.Env):
             target_phi_val = self.target_phi
             target_psi_val = self.target_psi
         else:
-            # Usiamo self.ref_of così l'agente vede i vincoli del profilo corrente dell'episodio
             target_phi_val = self.ref_of[IDX_PHI]
             target_psi_val = self.ref_of[IDX_PSI]
 
@@ -447,140 +417,101 @@ class BladeOptimEnv(gym.Env):
         return np.concatenate([dof_norm, of_vals, target_array, error_array]).astype(np.float32)
 
     def _get_observation(self):
-
-        # Costruisci l'osservazione: DOF normalizzati + OF
         return self._build_obs(self.current_dof_active, self.current_of)
 
     def reset(self, seed=None, options=None):
-        """
-        Reset Gymnasium-compliant con parametri seed e options.
-        Gestisce correttamente l'ancoraggio dei vincoli sia per profili fissi che casuali.
-        """
         super().reset(seed=seed)
 
-        # 1. Inizializza i DOF (Grandi di Libertà)
         if self.start_dof is not None:
-            # Task 2: Parte dal profilo specifico richiesto
             self.current_dof_full = np.array(self.start_dof, dtype=np.float32)
         else:
-            # Task 1: Genera un profilo iniziale completamente casuale entro i bound fisici
             self.current_dof_full = self.np_random.uniform(
                 self.dof_low_all, self.dof_high_all
             ).astype(np.float32)
 
-        # Estrae solo i DOF attivi che l'agente può effettivamente modificare
         self.current_dof_active = self.current_dof_full[ACTIVE_DOF_INDICES].copy()
-
-        # Valuta le performance (OF) di questo profilo iniziale tramite il metamodello Keras
         self.current_of = self.surrogate(self.current_dof_full)
         self.start_of = self.current_of.copy()
         self.step_count = 0
 
-        # 2. GESTIONE ANCORAGGIO VINCOLI (Risoluzione Bug Task 1)
         if self.start_dof is None:
-            # TASK 1: Poiché la pala cambia ad ogni episodio, il punto di riferimento
-            # per i vincoli del 2% deve forzatamente resettarsi e ancorarsi alla nuova pala corrente.
             self.ref_of = self.start_of.copy()
         else:
-            # TASK 2: Il profilo di partenza è fisso da database. Il vincolo del 2% si fissa
-            # una volta sola all'inizio e rimane lo stesso per tutti i cicli di addestramento.
             if self.ref_of is None:
                 self.ref_of = self.start_of.copy()
 
-        # 3. Costruisce lo stato iniziale da passare all'agente (inclusi i nuovi errori relativi)
         obs = self._get_observation()
-
         return obs, {}
 
     def step(self, action):
-        """
-        Applica l'azione dell'agente:
-        1. Modifica solo i DOF attivi
-        2. I DOF non attivi restano invariati
-        3. Valuta il profilo completo con la surrogate
-        4. Reward = CSI_prev - CSI_curr
-        """
         self.step_count += 1
-
         prev_of = self.current_of.copy()
 
-        if self.use_delta == True:
-
-            # Calcola delta solo per i DOF attivi
+        if self.use_delta:
             delta = action * self.action_scale * self.dof_range
-
-
-
-            # Aggiorna i DOF attivi nel vettore completo (7 DOF)
             new_dof_full = self.current_dof_full.copy()
             new_dof_active = self.current_dof_active + delta
             new_dof_active = np.clip(new_dof_active, self.dof_low, self.dof_high)
-
         else:
             new_dof_active = self.dof_low + (action + 1.0) / 2.0 * self.dof_range
-
-
-            # Aggiorna il profilo completo
             new_dof_full = self.current_dof_full.copy()
 
-        # Scrivi i DOF aggiornati nel vettore completo
         for i, idx in enumerate(ACTIVE_DOF_INDICES):
             new_dof_full[idx] = new_dof_active[i]
 
-
-
-        # Valuta il nuovo profilo (surrogate riceve sempre tutti e 7 i DOF)
         new_of = self.surrogate(new_dof_full)
 
-        tolleranza_target = 0.02  # 1% (scegli tu)
+        # REWARD PURA & CALCOLO COSTI NATIVI PER OMNISAFE
+        reward = float(prev_of[IDX_CSI] - new_of[IDX_CSI])  # L'obiettivo è massimizzare la riduzione delle perdite
 
         if (self.target_phi is not None) and (self.target_psi is not None):
-            reward = compute_reward_target(
-                new_of, prev_of,
-                phi_target=self.target_phi,
-                psi_target=self.target_psi,
-                tol_rel=tolleranza_target
-            )
-
+            tolleranza_target = tolleranza_phi_psi_imposti
             errore_psi = abs(new_of[IDX_PSI] - self.target_psi) / (abs(self.target_psi) + 1e-8)
             errore_phi = abs(new_of[IDX_PHI] - self.target_phi) / (abs(self.target_phi) + 1e-8)
-
             is_valid = bool((errore_psi <= tolleranza_target) and (errore_phi <= tolleranza_target))
 
+            # Costo proporzionale allo sforamento rispetto al target
+            cost_psi = max(0.0, errore_psi - tolleranza_target)
+            cost_phi = max(0.0, errore_phi - tolleranza_target)
         else:
-            # fallback: la tua reward attuale con vincoli su start_of
-            tolleranza_max = 0.005
-            reward_val = compute_reward(new_of, prev_of, self.ref_of, tolleranza=tolleranza_max)
-            reward = float(np.squeeze(reward_val))
-
+            tolleranza_max = tolleranza_profilo_partenza
             errore_psi = abs(new_of[IDX_PSI] - self.ref_of[IDX_PSI]) / (abs(self.ref_of[IDX_PSI]) + 1e-8)
             errore_phi = abs(new_of[IDX_PHI] - self.ref_of[IDX_PHI]) / (abs(self.ref_of[IDX_PHI]) + 1e-8)
-
-            # True se ENTRAMBI gli errori sono sotto il 3%
             is_valid = bool(errore_psi <= tolleranza_max and errore_phi <= tolleranza_max)
 
-        # Aggiorna stato interno
+            # Costo proporzionale allo sforamento rispetto al profilo iniziale
+            cost_psi = max(0.0, errore_psi - tolleranza_max)
+            cost_phi = max(0.0, errore_phi - tolleranza_max)
+
+        # Il costo totale inviato a OmniSafe è la somma delle violazioni dei vincoli cinematici
+        cost = float(cost_psi + cost_phi)
+
+        # Aggiornamento delle variabili di classe globali per il miglior profilo valido trovato
+        if is_valid and float(new_of[IDX_CSI]) < BladeOptimEnv.best_csi:
+            BladeOptimEnv.best_csi = float(new_of[IDX_CSI])
+            BladeOptimEnv.best_dof = new_dof_full.copy()
+            BladeOptimEnv.best_of = new_of.copy()
+
         self.current_dof_active = new_dof_active
         self.current_dof_full = new_dof_full
         self.current_of = new_of
 
         terminated = False
         truncated = self.step_count >= self.ep_length
-
         obs = self._build_obs(self.current_dof_active, self.current_of)
 
-
         info = {
-            "efficiency": None,
+            "cost": cost,  # <--- CHIAVE CRITICA: OmniSafe leggerà automaticamente questo valore come costo dello step
             "csi": float(new_of[IDX_CSI]),
             "psi": float(new_of[IDX_PSI]),
+            "phi": float(new_of[IDX_PHI]),
             "dof_active": self.current_dof_active.copy(),
             "dof_full": self.current_dof_full.copy(),
             "of": self.current_of.copy(),
-            "is_valid": is_valid,"err_phi_rel": float(errore_phi),
-
+            "is_valid": is_valid,
+            "err_phi_rel": float(errore_phi),
+            "err_psi_rel": float(errore_psi)
         }
-
 
         return obs, reward, terminated, truncated, info
 

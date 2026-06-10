@@ -5,8 +5,8 @@ from pptx import Presentation
 from pathlib import Path
 from Config.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, \
     OF_NAMES, TARGET_CSI, perturbazione_dof_attivi, DOF_BOUNDS_ALL, DOF_NAMES_ALL, dataset, df, USE_MULTIMODEL
-from Agente.PPO import train, pulisci_file_temporanei
-from Ambiente.Ambiente import load_surrogate, SURROGATE_MODEL_PATH, SCALER_PATH
+from Agente.FOCOPS import train, pulisci_file_temporanei
+from Ambiente.FOCOPS_Ambiente import  surrogate
 from Report.Presentazione import aggiungi_slide_iterazione, slide_iniziali_task_1, slide_iniziali_task_2, aggiungi_smith
 from Report.Plot import plot_smith, plot_smith_zoom_reaction
 
@@ -37,7 +37,7 @@ def task_1(use_delta):
     except Exception as e:
         print(f"  ⚠️  Errore nell'aggiunta slide iniali: {e}")
 
-    surrogate_fn = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
+
 
 
     # Loop su learning_rate e n_steps
@@ -57,7 +57,7 @@ def task_1(use_delta):
 
             # Esegui training
             model, best_dof, best_of, best_csi, model_path = train(
-                surrogate_fn=surrogate_fn,
+
                 start_dof=None,  # ← CASUALE
                 learning_rate=lr,
                 n_steps=n_step,
@@ -215,7 +215,7 @@ def task_2(use_delta):
         for active_dof in combinazioni_da_testare:
             # ---> FIX CRITICO: Aggiorniamo dinamicamente le variabili dell'ambiente!
             # Altrimenti Gym continuerebbe ad usare i parametri fissi del file .py
-            import Ambiente.Ambiente as env_module
+            import Ambiente.PPO_Ambiente as env_module
 
             env_module.ACTIVE_DOF_INDICES = active_dof
             env_module.DOF_BOUNDS = [DOF_BOUNDS_ALL[i] for i in active_dof]
@@ -256,7 +256,7 @@ def task_2(use_delta):
                     # Applichiamo la perturbazione
                     start_profile[idx] = valore_perturbato
 
-                    surrogate = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
+
 
                     input_dof = start_profile.reshape(1, -1)
                     predizione = surrogate(input_dof)
@@ -271,7 +271,7 @@ def task_2(use_delta):
 
                 print(f"\nProfilo di partenza per il PPO: {start_profile}.3f")
 
-            surrogate_fn = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
+
 
             # Testo l'addestramento di ogni profilo (riga) con diversi learning_rate per vedere quale è meglio
             for lr in learning_rate:
@@ -288,7 +288,7 @@ def task_2(use_delta):
                     # 5. Avvia il Training (Task 2)
                     print(f"\n  Learning_rate attuale : {lr}\n")
                     model, best_dof, best_of, best_csi, model_ = train(
-                        surrogate_fn=surrogate_fn,
+
                         start_dof=start_profile,
                         learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX, use_delta =use_delta, episode_length=episode_length,
                         ref_of=start_of_originali
@@ -314,10 +314,9 @@ def task_2(use_delta):
                         psi_ottimale = float(best_of[idx_psi_reale])
 
                     alpha_ex_ottimale = float(best_of[idx_alfa_ex_reale])
-                    if USE_MULTIMODEL == True:
-                        alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
-                    else:
-                        alpha_in_ottimale = 10
+
+                    alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
+
                     beta_1_ottimale = float(best_dof[idx_beta1_reale])
                     beta_2_ottimale = float(best_dof[idx_beta2_reale])
 

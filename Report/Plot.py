@@ -1,4 +1,4 @@
-from Ambiente.Ambiente import  DOF_BOUNDS_ALL, ACTIVE_DOF_INDICES
+from Ambiente.PPO_Ambiente import  DOF_BOUNDS_ALL, ACTIVE_DOF_INDICES
 from Config.Set_input_param import n_dof_totali,DOF_NAMES_ALL
 import numpy as np
 import matplotlib.pyplot as plt

@@ -5,6 +5,8 @@ from scipy.interpolate import interp1d
 from pathlib import Path
 import matplotlib.colors as mcolors
 
+from Config.Set_input_param import USE_MULTIMODEL
+
 
 class SmithDiagram_Reaction_total_to_total:
     """
@@ -915,27 +917,52 @@ if __name__ == "__main__":
 
 
     # 4. Carica il dataset
-    BASE_DIR = Path(__file__).resolve().parents[2]
-    DATASET_PATH = BASE_DIR / "Data" / "database.dat"
-    df = pd.read_csv(DATASET_PATH)
+    if USE_MULTIMODEL==None:
+        BASE_DIR = Path(__file__).resolve().parents[2]
+        DATASET_PATH = BASE_DIR / "Data" / "STEP_999" /"database.dat"
+        df = pd.read_csv(DATASET_PATH)
 
-    # 5. Plotta il diagramma
+        # 5. Plotta il diagramma
 
 
-    # 6. Aggiungi i punti del dataset come scatter plot
-    phi = df['OF_phi_OP_01'].values
-    psi = df['OF_psi_OP_01'].values
-    csi = df['OF_CSI_OP_01'].values
-    cpt = df['OF_Cpt_OP_01'].values
-    loss_tot = csi+cpt
+        # 6. Aggiungi i punti del dataset come scatter plot
+        phi = df['OF_phi_OP_01'].values
+        psi = df['OF_psi_OP_01'].values
+        csi = df['OF_CSI_OP_01'].values
+        cpt = df['OF_Cpt_OP_01'].values
+        loss_tot = csi+cpt
 
-    nome_colonna_alfa = 'OF_alfa_ex_OP_01'
-    nome_beta1 = 'DOF_BETA1_GEOM_'
-    nome_beta2 = 'DOF_BETA2_GEOM_'
+        nome_colonna_alfa = 'OF_alfa_ex_OP_01'
+        alfa_in =10
+        nome_beta1 = 'DOF_BETA1_GEOM_'
+        nome_beta2 = 'DOF_BETA2_GEOM_'
 
-    alfa_ex = df[nome_colonna_alfa].values
-    beta1 = df[nome_beta1].values
-    beta2 = df[nome_beta2].values
+        alfa_ex = df[nome_colonna_alfa].values
+        beta1 = df[nome_beta1].values
+        beta2 = df[nome_beta2].values
+    else:
+        BASE_DIR = Path(__file__).resolve().parents[2]
+        DATASET_PATH = BASE_DIR / "Data" / "STEP_028" / "database.dat"
+        df = pd.read_csv(DATASET_PATH)
+
+        # 5. Plotta il diagramma
+
+        # 6. Aggiungi i punti del dataset come scatter plot
+        phi = df['OF_phi_FL_OP_01'].values
+        psi = df['OF_psi_FL_OP_01'].values
+        csi = df['OF_CSI_FL_OP_01'].values
+        cpt = df['OF_Cpt_FL_OP_01'].values
+        loss_tot = csi + cpt
+
+        nome_colonna_alfa = 'OF_alfa_ex_FL_OP_01'
+        nome_colonna_alpha_in = 'DOF_ALFAIN_BC_'
+        nome_beta1 = 'DOF_BETA1_G0_'
+        nome_beta2 = 'DOF_BETA2_G0_'
+
+        alfa_ex = df[nome_colonna_alfa].values
+        alfa_in = df[nome_colonna_alpha_in].values
+        beta1 = df[nome_beta1].values
+        beta2 = df[nome_beta2].values
 
 
     # Plot del diagramma di Smith con tutto il dataset per vedere se al ridursi di CSi aumenta l'efficienza
@@ -982,8 +1009,8 @@ if __name__ == "__main__":
     for k, i in enumerate(indices):
         phi_i = float(phi[i])
         psi_i = float(psi[i])
-        alfa_ex_i = float(df['OF_alfa_ex_OP_01'].values[i])
-        defl_reale = 10.0 - alfa_ex_i  # alfa_in fisso = 10
+        alfa_ex_i = float(df[nome_colonna_alfa].values[i])
+        defl_reale = alfa_in - alfa_ex_i  # alfa_in fisso = 10
 
         color = cmap_10(k)
 

@@ -1,15 +1,18 @@
 import re
 import numpy as np
 import pandas as pd
+import os
 
 
 from stable_baselines3 import PPO
-from Ambiente.Ambiente import BladeOptimEnv, load_surrogate, DOF_BOUNDS_ALL, SURROGATE_MODEL_PATH, SCALER_PATH
+from Ambiente.PPO_Ambiente import BladeOptimEnv, load_surrogate, DOF_BOUNDS_ALL, SURROGATE_MODEL_PATH, SCALER_PATH, surrogate
 from pathlib import Path
 
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from Config.Set_input_param import ACTIVE_DOF_INDICES
 
 
 def plot_inferenza_results(steps_csi, best_csi, csi_originale, ep_length, modello_name, riga_idx=None):
@@ -68,24 +71,27 @@ def plot_inferenza_results(steps_csi, best_csi, csi_originale, ep_length, modell
 if __name__ == "__main__":
     from stable_baselines3 import PPO
 
-    import Ambiente.Ambiente as env_module
+    import Ambiente.PPO_Ambiente as env_module
 
-    active_dof_per_test = [0, 1, 2, 3, 4, 5, 6]
+    active_dof_per_test = ACTIVE_DOF_INDICES
     env_module.ACTIVE_DOF_INDICES = active_dof_per_test
     env_module.DOF_BOUNDS = [DOF_BOUNDS_ALL[i] for i in active_dof_per_test]
 
-    DATABASE_DIR = Path(__file__).parent.resolve()
-    DATASET_PATH = str(DATABASE_DIR / "Data" / "database.dat")
+    data_dir = Path(__file__).parent.resolve()
+    dataset = str(data_dir / "Data" / "STEP_028" / "database.dat")
 
-    df = pd.read_csv(DATASET_PATH)
+    df = pd.read_csv(dataset)
     riga_nuova_idx = 3
     riga_nuova = df.iloc[riga_nuova_idx].values
-    DOF_profilo = riga_nuova[2:9].astype(np.float32).copy()
-    OF_profilo = riga_nuova[9:24].astype(np.float32).copy()
-    csi_nuovo_originale = float(riga_nuova[11])
+    DOF_profilo = riga_nuova[1:22].astype(np.float32).copy()
+    OF_profilo = riga_nuova[22:35].astype(np.float32).copy()
+    csi_nuovo_originale = float(riga_nuova[24])
 
-    #modello_salvato = "ppo_task2_use_delta_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_riga[3]"
-    modello_salvato = "ppo_task1_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_con_delta"
+    modello_nome = "ppo_task2_use_delta_con_phi_psi_uguali_all_DOF_lr3e-05_nsteps200_riga[3].zip"
+    #modello_nome = "ppo_task1_con_phi_psi_uguali_DOFPITCH_DOFBETA1_DOFBETA2_DOFW1_DOFW2_DOFTMOVXU_DOFTMOVXL_lr3e-05_nsteps200_con_delta"
+
+    modello_salvato = os.path.join("Risultati", "Modelli", modello_nome)
+
 
     print(f"\nProfilo da ottimizzare (riga {riga_nuova_idx}):")
     print(f"\nDOF {DOF_profilo}")
@@ -94,10 +100,11 @@ if __name__ == "__main__":
 
     # ===== MODIFICATO: Traccia i CSI per ogni step =====
     model = PPO.load(modello_salvato)
-    surrogate = load_surrogate(SURROGATE_MODEL_PATH, SCALER_PATH)
-    env = BladeOptimEnv(surrogate, start_dof=DOF_profilo, episode_length=40)
+    surrogate = surrogate
+    env = BladeOptimEnv(start_dof=DOF_profilo, episode_length=40)
 
     obs, info = env.reset()
+
 
     # Inizializza best_csi a infinito. Se l'agente non trova nulla di valido, rimarrà inf
     best_csi = np.inf

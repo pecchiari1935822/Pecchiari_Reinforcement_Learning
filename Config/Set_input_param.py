@@ -6,14 +6,14 @@ from pathlib import Path
 # 0. CONFIGURAZIONE DEL DATASET CORRENTE
 # =====================================================================
 
-USE_MULTIMODEL = None
+USE_MULTIMODEL = None # per il momento sto utilizzando il medello unico che ho addestrato io per il nuovo datast che
 
 data_dir = Path(__file__).parent.parent.resolve()
 
 if not USE_MULTIMODEL:
-    modello_rete = str(data_dir / "Data" / "STEP_999" / "models" / "best_model.keras")
-    scaler_rete = str(data_dir / "Data" / "STEP_999" / "scalers" / "scalers.joblib")
-    dataset = str(data_dir / "Data" / "STEP_999" / "database.dat")
+    modello_rete = str(data_dir / "Data" / "STEP_028" / "modello_unico" / "best_model.keras")
+    scaler_rete = str(data_dir / "Data" / "STEP_028" / "modello_unico" / "scalers.joblib")
+    dataset = str(data_dir / "Data" / "STEP_028" / "database.dat")
 
 else:
     nuovi_modelli_dir = data_dir / "Data" / "STEP_028"
@@ -91,7 +91,7 @@ PPO_PARAMS = dict(
     verbose         = 1,
 )
 
-ROW_INDEX = [879]  # Modificalo se la riga di partenza cambia nel nuovo dataset
+ROW_INDEX = [3]  # Modificalo se la riga di partenza cambia nel nuovo dataset
 
 
 # =====================================================================
@@ -127,6 +127,10 @@ TARGET_PHI = next((col for col in OF_NAMES if "PHI" in col.upper()), None)
 target_phi = None
 target_psi = None
 perturbazione_dof_attivi = None
+# tolleranza rispetto a phi e psi del profilo di partenza
+tolleranza_profilo_partenza=0.05
+# tolleranza rispetto a phi e psi imposti arbitrariamente
+tolleranza_phi_psi_imposti = 0.02
 
 # =====================================================================
 # 4. GESTIONE DEI DOF ATTIVI E COMBINAZIONI

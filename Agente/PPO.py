@@ -7,7 +7,7 @@ import os
 import time
 import shutil
 import glob
-from Ambiente.Ambiente import BladeOptimEnv
+from Ambiente.PPO_Ambiente import BladeOptimEnv
 from Config.Set_input_param import PPO_PARAMS, \
     TOTAL_TIMESTEPS, n_dof_totali, target_phi, target_psi, DOF_NAMES_ALL, OF_NAMES, ACTIVE_DOF_INDICES, early_stopping
 from Report.Plot import _plot_results, _plot_training_metrics_actor, _plot_training_metrics_critic, _plot_dof_evolution
@@ -199,9 +199,8 @@ class BladeCallback(BaseCallback):
 # TRAINING
 # ============================================================
 
-def train(surrogate_fn,
-          start_dof=None,
-          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta = True, episode_length=None, ref_of=None,
+def train(start_dof=None,
+          learning_rate=None, n_steps=None, batch_size=None, ROW_INDEX=None, use_delta=True, episode_length=None, ref_of=None,
           task1=None
           ):
     print("=" * 60)
@@ -212,124 +211,84 @@ def train(surrogate_fn,
 
     # check_env PRIMA di Monitor (evita bug NoneType)
     print("\n  Verifica ambiente...")
-    env_raw = BladeOptimEnv(surrogate_fn, start_dof=start_dof, use_delta =use_delta, episode_length= episode_length,
+    env_raw = BladeOptimEnv(start_dof=start_dof, use_delta=use_delta, episode_length=episode_length,
                             target_phi=target_phi, target_psi=target_psi, ref_of=ref_of)
     check_env(env_raw, warn=True)
     print("  Ambiente OK.\n")
 
-    if start_dof is None:
-        import re
-        active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
-        safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
-        active_tag = "_".join(safe_names) if safe_names else "ALL"
+    import re
+    import os
 
-        # --- percorsi dinamici per checkpoint, log e monitor ---
+    # 1. SETUP DINAMICO DELLE VARIABILI E DEI PERCORSI
+    active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
+    safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
+    active_tag = "_".join(safe_names) if safe_names else "ALL"
+
+    if start_dof is None:
+        # Variabili Task 1
         checkpoint_dir = f"./ppo_blade_task1_checkpoints/"
         log_dir = f"./ppo_blade_task1_logs/"
-        monitor_file = f"./ppo_blade_generale_monitor"
-    else:
-        import re
-        active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
-        safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
-        active_tag = "_".join(safe_names) if safe_names else "ALL"
-
-        # --- percorsi dinamici per checkpoint, log e monitor ---
-        checkpoint_dir = f"./ppo_blade_task2_checkpoints/"
-        log_dir = f"./ppo_blade_task2_logs/"
-        monitor_file = f"./ppo_blade_start_profile_monitor"
-
-        # Crea le directory se non esistono
-        import os
-        os.makedirs(checkpoint_dir, exist_ok=True)
-        os.makedirs(log_dir, exist_ok=True)
-
-
-    env = Monitor(env_raw, filename="./ppo_blade_monitor")
-
-    cb_blade = BladeCallback(verbose=0, start_dof=start_dof, episode_length=episode_length)
-    cb_ckpt = CheckpointCallback(
-        save_freq=10000, save_path="./ppo_blade_checkpoints/",
-        name_prefix="ppo_blade", verbose=1,
-    )
-
-    if task1 == True:
-        policy_kwargs = dict(
-            net_arch=dict(pi=[256, 256], vf=[256, 256]))
-        model = PPO(
-            policy="MlpPolicy", env=env,
-            policy_kwargs=policy_kwargs,
-            tensorboard_log=log_dir,
-            seed=42,
-            learning_rate=learning_rate,
-            n_steps=n_steps,
-            batch_size=batch_size,
-            **PPO_PARAMS
-        )
-    else:
-        model = PPO(
-            policy="MlpPolicy", env=env,
-            policy_kwargs=dict(net_arch=dict(pi=[128, 128], vf=[128, 128])),
-            tensorboard_log=log_dir,
-            seed=42,
-            learning_rate=learning_rate,
-            n_steps=n_steps,
-            batch_size=batch_size,
-            **PPO_PARAMS
-        )
-
-    print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
-    print("  (tensorboard --logdir ./ppo_blade_logs/)\n")
-
-    # --- costruisci tag identificativo basato sui nomi DOF attivi ---
-    if start_dof is None:
-        active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
-        safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
-        active_tag = "_".join(safe_names) if safe_names else "ALL"
         if use_delta == True:
             model_basename = f"ppo_task1_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_con_delta"
         else:
             model_basename = f"ppo_task1_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_senza_delta"
-        model_path = os.path.join("Risultati", "Modelli", model_basename)  # SB3 aggiunge .zip se serve
-
-        print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
-        print(f"  Modello di output: {model_path}.zip")
-        print("  (tensorboard --logdir ./ppo_blade_logs/)\n")
-
-        start_time = time.time()
-
-        model.learn(
-            total_timesteps=TOTAL_TIMESTEPS,
-            callback=[cb_blade, cb_ckpt],
-            progress_bar=True,
-        )
-
-        model.save(model_path)
-        print(f"\n  Modello salvato: {model_path}.zip")
-
     else:
-        active_names = [DOF_NAMES_ALL[i] for i in ACTIVE_DOF_INDICES]
-        safe_names = [re.sub(r'[^0-9A-Za-z]+', '', n) for n in active_names]
-        active_tag = "_".join(safe_names) if safe_names else "ALL"
+        # Variabili Task 2
+        checkpoint_dir = f"./ppo_blade_task2_checkpoints/"
+        log_dir = f"./ppo_blade_task2_logs/"
         if use_delta == True:
             model_basename = f"ppo_task2_use_delta_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
         else:
             model_basename = f"ppo_task2_no_use_delta_con_phi_psi_uguali_all_DOF_lr{learning_rate}_nsteps{n_steps}_riga{ROW_INDEX}"
-        model_path = os.path.join("Risultati", "Modelli", model_basename)  # SB3 aggiunge .zip se serve
 
-        print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
-        print(f"  Modello di output: {model_path}.zip")
-        print("  (tensorboard --logdir ./ppo_blade_logs/)\n")
+    # Crea le directory se non esistono
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    os.makedirs(log_dir, exist_ok=True)
 
-        start_time = time.time()
+    # Costruisci il path finale per il salvataggio
+    model_path = os.path.join("Risultati", "Modelli", model_basename)
 
-        model.learn(
-            total_timesteps=TOTAL_TIMESTEPS,
-            callback=[cb_blade, cb_ckpt],
-            progress_bar=True,
-        )
+    # 2. INIZIALIZZAZIONE AMBIENTE E CALLBACK
+    env = Monitor(env_raw, filename="./ppo_blade_monitor") # Lasciato come l'originale
 
-        model.save(model_path)
-        print(f"\n  Modello salvato: {model_path}.zip")
+    cb_blade = BladeCallback(verbose=0, start_dof=start_dof, episode_length=episode_length)
+    cb_ckpt = CheckpointCallback(
+        save_freq=10000, save_path=checkpoint_dir,  # Usa la dir dinamica creata sopra
+        name_prefix="ppo_blade", verbose=1,
+    )
+
+    # 3. SETUP DINAMICO DELL'AGENTE PPO
+    # Scegli la dimensione della rete in base al task, proprio come facevi prima
+    net_sizes = [256, 256] if task1 == True else [128, 128]
+    policy_kwargs = dict(net_arch=dict(pi=net_sizes, vf=net_sizes))
+
+    model = PPO(
+        policy="MlpPolicy", env=env,
+        policy_kwargs=policy_kwargs,
+        tensorboard_log=log_dir,
+        seed=42,
+        learning_rate=learning_rate,
+        n_steps=n_steps,
+        batch_size=batch_size,
+        **PPO_PARAMS
+    )
+
+    # 4. AVVIO DELL'ADDESTRAMENTO
+    print(f"  Addestramento: {TOTAL_TIMESTEPS:,} step")
+    print(f"  Modello di output: {model_path}.zip")
+    print(f"  (tensorboard --logdir {log_dir})\n")
+
+    start_time = time.time()
+
+    model.learn(
+        total_timesteps=TOTAL_TIMESTEPS,
+        callback=[cb_blade, cb_ckpt],
+        progress_bar=True,
+    )
+
+    # 5. SALVATAGGIO E REPORT
+    model.save(model_path)
+    print(f"\n  Modello salvato: {model_path}.zip")
 
     end_time = time.time()
     training_time = end_time - start_time
