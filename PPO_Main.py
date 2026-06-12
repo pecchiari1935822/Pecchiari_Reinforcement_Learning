@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from pptx import Presentation
 from pathlib import Path
-from Config.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, \
+from Config.PPO_Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, \
     OF_NAMES, TARGET_CSI, perturbazione_dof_attivi, DOF_BOUNDS_ALL, DOF_NAMES_ALL, dataset, df, USE_MULTIMODEL
 from Agente.PPO import train, pulisci_file_temporanei
 from Ambiente.PPO_Ambiente import  surrogate
@@ -72,7 +72,8 @@ def task_1(use_delta):
             idx_phi_reale = next((i for i, name in enumerate(OF_NAMES) if "PHI" in name.upper()), None)
             idx_psi_reale = next((i for i, name in enumerate(OF_NAMES) if "PSI" in name.upper()), None)
             idx_alfa_ex_reale = next((i for i, name in enumerate(OF_NAMES) if "ALFA_EX" in name.upper()), None)
-            idx_alfa_in_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "ALFAIN" in name.upper()), None)
+            if USE_MULTIMODEL == True:
+                idx_alfa_in_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "ALFAIN" in name.upper()), None)
             idx_beta1_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA1" in name.upper()), None)
             idx_beta2_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA2" in name.upper()), None)
 
@@ -82,9 +83,12 @@ def task_1(use_delta):
             if idx_psi_reale is not None:
                 psi_ottimale = float(best_of[idx_psi_reale])
 
-
             alpha_ex_ottimale = float(best_of[idx_alfa_ex_reale])
-            alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
+
+            if USE_MULTIMODEL == True:
+                alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
+            else:
+                alpha_in_ottimale = 10
             beta_1_ottimale = float(best_dof[idx_beta1_reale])
             beta_2_ottimale = float(best_dof[idx_beta2_reale])
 
@@ -303,7 +307,8 @@ def task_2(use_delta):
                     idx_phi_reale = next((i for i, name in enumerate(OF_NAMES) if "PHI" in name.upper()), None)
                     idx_psi_reale = next((i for i, name in enumerate(OF_NAMES) if "PSI" in name.upper()), None)
                     idx_alfa_ex_reale = next((i for i, name in enumerate(OF_NAMES) if "ALFA_EX" in name.upper()), None)
-                    idx_alfa_in_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "ALFAIN" in name.upper()), None)
+                    if USE_MULTIMODEL == True:
+                        idx_alfa_in_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "ALFAIN" in name.upper()), None)
                     idx_beta1_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA1" in name.upper()), None)
                     idx_beta2_reale = next((i for i, name in enumerate(DOF_NAMES_ALL) if "BETA2" in name.upper()), None)
 
@@ -315,7 +320,10 @@ def task_2(use_delta):
 
                     alpha_ex_ottimale = float(best_of[idx_alfa_ex_reale])
 
-                    alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
+                    if USE_MULTIMODEL == True:
+                        alpha_in_ottimale = float(best_dof[idx_alfa_in_reale])
+                    else:
+                        alpha_in_ottimale = 10
 
                     beta_1_ottimale = float(best_dof[idx_beta1_reale])
                     beta_2_ottimale = float(best_dof[idx_beta2_reale])
@@ -387,7 +395,7 @@ def task_2(use_delta):
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    #task_1(True)
+    task_1(True)
     #task_1(False)
-    task_2(True)
+    #task_2(True)
     #task_2(False)

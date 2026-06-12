@@ -5,7 +5,7 @@ from scipy.interpolate import interp1d
 from pathlib import Path
 import matplotlib.colors as mcolors
 
-from Config.Set_input_param import USE_MULTIMODEL
+from Config.PPO_Set_input_param import USE_MULTIMODEL
 
 
 class SmithDiagram_Reaction_total_to_total:

@@ -1,7 +1,7 @@
-from Config.Set_input_param import DOF_NAMES_ALL, DOF_BOUNDS_ALL, OF_NAMES, ACTIVE_DOF_INDICES
+from Config.PPO_Set_input_param import DOF_NAMES_ALL, DOF_BOUNDS_ALL, OF_NAMES, ACTIVE_DOF_INDICES
 from pptx.util import Inches
 import os
-from Config.Set_input_param import PPO_PARAMS
+from Config.PPO_Set_input_param import PPO_PARAMS
 
 
 

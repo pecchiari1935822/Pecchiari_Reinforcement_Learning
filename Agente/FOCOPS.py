@@ -7,7 +7,7 @@ import shutil
 import glob
 import pandas as pd
 from Ambiente.FOCOPS_Ambiente import BladeOptimEnv
-from Config.Set_input_param import PPO_PARAMS, \
+from Config.PPO_Set_input_param import PPO_PARAMS, \
     TOTAL_TIMESTEPS, n_dof_totali, target_phi, target_psi, DOF_NAMES_ALL, OF_NAMES, ACTIVE_DOF_INDICES, early_stopping
 from Report.Plot import _plot_results, _plot_training_metrics_actor, _plot_training_metrics_critic, _plot_dof_evolution
 

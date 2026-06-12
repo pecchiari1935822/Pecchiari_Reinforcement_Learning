@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from pptx import Presentation
 from pathlib import Path
-from Config.Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, \
+from Config.PPO_Set_input_param import ROW_INDEX, combinazioni_da_testare, learning_rate, n_steps, ACTIVE_DOF_INDICES, \
     OF_NAMES, TARGET_CSI, perturbazione_dof_attivi, DOF_BOUNDS_ALL, DOF_NAMES_ALL, dataset, df, USE_MULTIMODEL
 from Agente.FOCOPS import train, pulisci_file_temporanei
 from Ambiente.FOCOPS_Ambiente import  surrogate

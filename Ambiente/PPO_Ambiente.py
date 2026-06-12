@@ -3,9 +3,9 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from pathlib import Path
-from Config.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, OF_NAMES, TARGET_CSI,
-                                    TARGET_PHI, TARGET_PSI, modello_rete, scaler_rete, tolleranza_profilo_partenza, tolleranza_phi_psi_imposti
-                                    )
+from Config.PPO_Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, OF_NAMES, TARGET_CSI,
+                                        TARGET_PHI, TARGET_PSI, modello_rete, scaler_rete, tolleranza_profilo_partenza, tolleranza_phi_psi_imposti
+                                        )
 
 # ============================================================
 # CONFIGURAZIONE
@@ -124,7 +124,7 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH, scaler_path=SCALER_PATH):
         import tensorflow as tf
         import joblib
         import pandas as pd  # Importiamo pandas per risolvere il problema dei nomi delle colonne
-        from Config.Set_input_param import DOF_NAMES_ALL  # Importiamo i nomi reali delle colonne dei DOF
+        from Config.PPO_Set_input_param import DOF_NAMES_ALL  # Importiamo i nomi reali delle colonne dei DOF
 
         # 1. Carichiamo lo scaler GLOBALE per i DOF (Input X)
         if "X_GLOBAL" in scaler_path:
@@ -139,7 +139,7 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH, scaler_path=SCALER_PATH):
                     f"  [INFO] Nomi colonne estratti dallo scaler con successo ({len(colonne_attese_scaler)} feature).")
             else:
                 # Fallback protettivo se la proprietà non esistesse (ma nel tuo ColumnTransformer c'è sicuramente)
-                from Config.Set_input_param import DOF_NAMES_ALL
+                from Config.PPO_Set_input_param import DOF_NAMES_ALL
                 colonne_attese_scaler = DOF_NAMES_ALL
 
             # Funzione di scaling che impacchetta l'input con i nomi corretti richiesti dallo scaler

@@ -10,10 +10,10 @@ USE_MULTIMODEL = None # per il momento sto utilizzando il medello unico che ho a
 
 data_dir = Path(__file__).parent.parent.resolve()
 
-if not USE_MULTIMODEL:
-    modello_rete = str(data_dir / "Data" / "STEP_028" / "modello_unico" / "best_model.keras")
-    scaler_rete = str(data_dir / "Data" / "STEP_028" / "modello_unico" / "scalers.joblib")
-    dataset = str(data_dir / "Data" / "STEP_028" / "database.dat")
+if USE_MULTIMODEL == None:
+    modello_rete = str(data_dir / "Data" / "STEP_999" / "models" / "best_model.keras")
+    scaler_rete = str(data_dir / "Data" / "STEP_999" / "scalers" / "scalers.joblib")
+    dataset = str(data_dir / "Data" / "STEP_999" / "database.dat")
 
 else:
     nuovi_modelli_dir = data_dir / "Data" / "STEP_028"
@@ -74,10 +74,10 @@ df.columns = df.columns.str.replace("_GM_", "", regex=False)
 # =====================================================================
 # 1. PARAMETRI DI TRAINING (Rimangono invariati)
 # =====================================================================
-TOTAL_TIMESTEPS = 600_000
+TOTAL_TIMESTEPS = 300_000
 learning_rate = [0.00003]
 n_steps = [200]
-early_stopping = True
+early_stopping = None
 ACTION_SCALE = 0.05
 
 PPO_PARAMS = dict(
@@ -128,9 +128,9 @@ target_phi = None
 target_psi = None
 perturbazione_dof_attivi = None
 # tolleranza rispetto a phi e psi del profilo di partenza
-tolleranza_profilo_partenza=0.05
+tolleranza_profilo_partenza=0.005
 # tolleranza rispetto a phi e psi imposti arbitrariamente
-tolleranza_phi_psi_imposti = 0.02
+tolleranza_phi_psi_imposti = 0.005
 
 # =====================================================================
 # 4. GESTIONE DEI DOF ATTIVI E COMBINAZIONI

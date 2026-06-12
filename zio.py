@@ -3,9 +3,9 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 from pathlib import Path
-from Config.Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, OF_NAMES, TARGET_CSI,
-                                    TARGET_PHI, TARGET_PSI
-                                    )
+from Config.PPO_Set_input_param import (ACTIVE_DOF_INDICES, ACTION_SCALE, DOF_BOUNDS_ALL, OF_NAMES, TARGET_CSI,
+                                        TARGET_PHI, TARGET_PSI
+                                        )
 
 # ============================================================
 # CONFIGURAZIONE PERCORSI
@@ -29,7 +29,7 @@ SCALER_PATH          = str(AMBIENTE_DIR / "Data" / "models" / "scalers.joblib")
 #
 # La mappatura tra i nomi degli OF nel codice (OF_NAMES, es. "OF_CSI")
 # e i nomi dei file (es. "CSI_FL") è definita nella variabile
-# OF_NAME_TO_FILE_KEY in Set_input_param.py (vedi sotto).
+# OF_NAME_TO_FILE_KEY in PPO_Set_input_param.py (vedi sotto).
 MULTI_SURROGATE_DIR  = str(AMBIENTE_DIR / "Data" / "models" / "multi")
 
 # ── Selezione DOF attivi ─────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ def load_multi_surrogate(models_dir=MULTI_SURROGATE_DIR,
 
     La mappatura tra i nomi interni degli OF (OF_NAMES, es. "OF_CSI") e
     i nomi dei file (es. "CSI_FL") deve essere fornita tramite il parametro
-    of_name_to_file_key, oppure viene letta automaticamente da Set_input_param.py.
+    of_name_to_file_key, oppure viene letta automaticamente da PPO_Set_input_param.py.
 
     Esempio di of_name_to_file_key:
         {
@@ -173,7 +173,7 @@ def load_multi_surrogate(models_dir=MULTI_SURROGATE_DIR,
     ----------
     models_dir         : cartella contenente i file .keras e .joblib
     of_name_to_file_key: dict {nome_OF_interno -> chiave_file}
-                         Se None, viene importato da Set_input_param.py
+                         Se None, viene importato da PPO_Set_input_param.py
     """
     import tensorflow as tf
     import joblib
@@ -182,12 +182,12 @@ def load_multi_surrogate(models_dir=MULTI_SURROGATE_DIR,
     # Leggi la mappatura da Set_input_param se non fornita esplicitamente
     if of_name_to_file_key is None:
         try:
-            from Config.Set_input_param import OF_NAME_TO_FILE_KEY
+            from Config.PPO_Set_input_param import OF_NAME_TO_FILE_KEY
             of_name_to_file_key = OF_NAME_TO_FILE_KEY
         except ImportError:
             raise ValueError(
                 "of_name_to_file_key non fornita e OF_NAME_TO_FILE_KEY non trovata "
-                "in Set_input_param.py. Definisci la mappatura prima di usare "
+                "in PPO_Set_input_param.py. Definisci la mappatura prima di usare "
                 "load_multi_surrogate()."
             )
 
@@ -261,7 +261,7 @@ def load_multi_surrogate(models_dir=MULTI_SURROGATE_DIR,
         """
         dof_raw : np.array shape (n_dof_totali,) — DOF in unità fisiche reali
                   I valori devono corrispondere alle features attese da scaler_DOF
-                  nell'ordine definito da DOF_NAMES_ALL in Set_input_param.py.
+                  nell'ordine definito da DOF_NAMES_ALL in PPO_Set_input_param.py.
 
         return  : np.array shape (n_of_totali,)  — OF in unità fisiche reali
                   Gli OF non mappati vengono restituiti come np.nan.
