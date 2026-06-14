@@ -6,7 +6,7 @@ from pathlib import Path
 # 0. CONFIGURAZIONE DEL DATASET CORRENTE
 # =====================================================================
 
-USE_MULTIMODEL = None # per il momento sto utilizzando il medello unico che ho addestrato io per il nuovo datast che
+USE_MULTIMODEL = True # per il momento sto utilizzando il medello unico che ho addestrato io per il nuovo datast che
 
 data_dir = Path(__file__).parent.parent.resolve()
 

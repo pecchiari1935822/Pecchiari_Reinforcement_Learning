@@ -25,13 +25,13 @@ ROW_INDEX    = 564        # riga del dataset da ottimizzare
 EP_LENGTH    = 40       # numero di step per episodio
 
 # Task2 con modello vecchio
-MODELLO_NOME = "PPO_task2_vecchio_dataset_lr3e-05_nsteps200_riga[3].zip"
+#MODELLO_NOME = "PPO_task2_vecchio_dataset_lr3e-05_nsteps200_riga[3].zip"
 
 # Task1 con modello vecchio
 #MODELLO_NOME = "PPO_task1_vecchio_dataset_lr3e-05_nsteps200_con_delta.zip"
 
 # Task2 con modello nuovo
-#MODELLO_NOME = "PPO_task2_nuovo_dataset_lr3e-05_nsteps200_riga[3].zip"
+MODELLO_NOME = "PPO_task2_nuovo_dataset_lr3e-05_nsteps200_riga[3].zip"
 
 # Task1 con modello nuovo
 #MODELLO_NOME = "PPO_task1_nuovo_dataset_lr3e-05_nsteps200_con_delta.zip"
