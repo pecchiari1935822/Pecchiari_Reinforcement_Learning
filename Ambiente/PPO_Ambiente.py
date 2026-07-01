@@ -193,22 +193,41 @@ def load_surrogate(model_path=SURROGATE_MODEL_PATH, scaler_path=SCALER_PATH):
         inv_off_list = []
         inv_sc_list = []
 
-        for of_name in OF_NAMES:
-            matching_key = next(
-                (k for k in model_path.keys() if k.upper() in of_name.upper() or of_name.upper() in k.upper()),
-                None)
+        def get_matching_key(of_name, model_path):
+            name = of_name.upper()
 
-            if not matching_key:
-                for kw, mk in [("CSI", "CSI"), ("CPT", "CPT"), ("PSI", "PSI"), ("PHI", "PHI"),
-                               ("ALFA_EX", "ALFA_EX"), ("AREA", "Area"), ("DFSS_MIS", "DFSS_MIS"),
-                               ("DS_CP", "DS_CP"), ("TMAX", "TMAX"), ("X_TMAX", "X_TMAX"),
-                               ("WEDGE", "WEDGE_TE"), ("UGT", "UGT"), ("ZWC", "ZWC")]:
-                    if kw in of_name.upper() and mk in model_path:
-                        matching_key = mk
-                        break
+            mapping = [
+                ("X_TMAX", "X_TMAX"),
+                ("WEDGE_TE", "WEDGE_TE"),
+                ("DS_CP", "DS_CP"),
+                ("DFSS_MIS", "DFSS_MIS"),
+                ("ALFA_EX", "ALFA_EX"),
+                ("TMAX", "TMAX"),
+                ("AREA", "Area"),
+                ("CSI", "CSI"),
+                ("CPT", "CPT"),
+                ("PSI", "PSI"),
+                ("PHI", "PHI"),
+                ("UGT", "UGT"),
+                ("ZWC", "ZWC"),
+            ]
+
+            for token, key in mapping:
+                if token in name and key in model_path:
+                    return key
+
+            return None
+
+        for idx_of, of_name in enumerate(OF_NAMES):
+            matching_key = get_matching_key(of_name, model_path)
+
+            print(f"[CHECK MATCH] OF={of_name}  -->  key={matching_key}")
 
             if matching_key:
+                model_path_str = model_path[matching_key]
                 print(f"  -> Caricamento modello per {of_name} (chiave: {matching_key})")
+                print(f"[CHECK PATH] modello = {model_path[matching_key]}")
+                print(f"[CHECK PATH] scaler  = {scaler_path[matching_key]}")
                 k_model = tf.keras.models.load_model(model_path[matching_key])
                 scaler_y = joblib.load(scaler_path[matching_key])
 
@@ -304,22 +323,8 @@ def compute_reward(of_current, of_previous, of_start, tolleranza=None):
     eta_prev = psi_prev / (1+csi_prev)
 
     # Variabili per la penalizzazione se phi o psi cambiano più di un tot %
-    psi_start = of_start[IDX_PSI]
-    phi_start = of_start[IDX_PHI]
-    phi_curr = of_current[IDX_PHI]
-
-    errore_psi = abs(psi_curr - psi_start) / abs((psi_start) + 1e-8)
 
 
-    errore_phi = abs(phi_curr - phi_start) / abs((phi_start) + 1e-8)
-
-    penalty = 0.0
-    if errore_psi > tolleranza:
-        # Penalità quadratica: se sgarri di poco, la penalità è minima. Se sgarri di tanto, esplode.
-        penalty += 50.0 * ((errore_psi - tolleranza) ** 2)
-
-    if errore_phi > tolleranza:
-        penalty += 50.0 * ((errore_phi - tolleranza) ** 2)
 
     reward_csi = float(csi_prev - csi_curr)
 
@@ -327,7 +332,7 @@ def compute_reward(of_current, of_previous, of_start, tolleranza=None):
     # return float (eta_curr - eta_prev)
 
     # Ricompensa per l'ottimizzazione delle perdite con la penalità
-    return reward_csi - penalty
+    return reward_csi
 
 def compute_reward_target(
     of_current,
@@ -352,18 +357,10 @@ def compute_reward_target(
     phi_curr = float(of_current[IDX_PHI])
     psi_curr = float(of_current[IDX_PSI])
 
-    # errori relativi rispetto ai TARGET
-    e_phi = abs(phi_curr - phi_target) / (abs(phi_target) + 1e-8)
-    e_psi = abs(psi_curr - psi_target) / (abs(psi_target) + 1e-8)
 
-    penalty = 0.0
-    if e_phi > tol_rel:
-        penalty += 50.0 * ((e_phi - tol_rel)**2)
-    if e_psi > tol_rel:
-        penalty += 50.0 * ((e_psi - tol_rel)**2)
 
     reward_csi = csi_prev - csi_curr
-    return float(reward_csi - penalty)
+    return float(reward_csi)
 
 # ============================================================
 # AMBIENTE GYMNASIUM CUSTOM
@@ -416,11 +413,15 @@ class BladeOptimEnv(gym.Env):
             dtype=np.float32
         )
 
+        FIXED_DOF_INDICES = [i for i in range(len(DOF_BOUNDS_ALL)) if i not in ACTIVE_DOF_INDICES]
+        self.fixed_dof_indices = FIXED_DOF_INDICES
+        n_fixed_dof = len(FIXED_DOF_INDICES)
+
         # --- SPAZIO OSSERVAZIONI ---
         # DOF attivi normalizzati [0,1] + tutti i 15 OF
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
-            shape=(n_active_dof + n_of+4,),
+            shape=(n_active_dof + n_fixed_dof + n_of,),
             dtype=np.float32
         )
 
@@ -434,25 +435,19 @@ class BladeOptimEnv(gym.Env):
     def _build_obs(self, dof_active, of_vals):
         dof_norm = (dof_active - self.dof_low) / (self.dof_range + 1e-8)
 
-        if (self.target_phi is not None) and (self.target_psi is not None):
-            target_phi_val = self.target_phi
-            target_psi_val = self.target_psi
-        else:
-            # Usiamo self.ref_of così l'agente vede i vincoli del profilo corrente dell'episodio
-            target_phi_val = self.ref_of[IDX_PHI]
-            target_psi_val = self.ref_of[IDX_PSI]
 
-        target_array = np.array([target_psi_val, target_phi_val], dtype=np.float32)
+        from Config.PPO_Set_input_param import OF_BOUNDS_ALL
+        of_low = np.array([b[0] for b in OF_BOUNDS_ALL], dtype=np.float32)
+        of_range = np.array([b[1] - b[0] for b in OF_BOUNDS_ALL], dtype=np.float32)
+        of_norm = (of_vals - of_low) / (of_range + 1e-8)
 
-        phi_curr = of_vals[IDX_PHI]
-        psi_curr = of_vals[IDX_PSI]
+        fixed_vals = self.current_dof_full[self.fixed_dof_indices]
+        fixed_low = self.dof_low_all[self.fixed_dof_indices]
+        fixed_high = self.dof_high_all[self.fixed_dof_indices]
+        fixed_norm = (fixed_vals - fixed_low) / (fixed_high - fixed_low + 1e-8)
 
-        errore_psi = abs(psi_curr - target_psi_val) / (abs(target_psi_val) + 1e-8)
-        errore_phi = abs(phi_curr - target_phi_val) / (abs(target_phi_val) + 1e-8)
 
-        error_array = np.array([errore_psi, errore_phi], dtype=np.float32)
-
-        return np.concatenate([dof_norm, of_vals, target_array, error_array]).astype(np.float32)
+        return np.concatenate([dof_norm, fixed_norm, of_norm,]).astype(np.float32)
 
     def _get_observation(self):
 
@@ -561,11 +556,9 @@ class BladeOptimEnv(gym.Env):
             reward_val = compute_reward(new_of, prev_of, self.ref_of, tolleranza=tolleranza_max)
             reward = float(np.squeeze(reward_val))
 
-            errore_psi = abs(new_of[IDX_PSI] - self.ref_of[IDX_PSI]) / (abs(self.ref_of[IDX_PSI]) + 1e-8)
-            errore_phi = abs(new_of[IDX_PHI] - self.ref_of[IDX_PHI]) / (abs(self.ref_of[IDX_PHI]) + 1e-8)
 
-            # True se ENTRAMBI gli errori sono sotto il 3%
-            is_valid = bool(errore_psi <= tolleranza_max and errore_phi <= tolleranza_max)
+
+
 
         # Aggiorna stato interno
         self.current_dof_active = new_dof_active
@@ -586,9 +579,7 @@ class BladeOptimEnv(gym.Env):
             "dof_active": self.current_dof_active.copy(),
             "dof_full": self.current_dof_full.copy(),
             "of": self.current_of.copy(),
-            "is_valid": is_valid,
-            "err_phi_rel": float(errore_phi),
-            "err_psi_rel": float(errore_psi)
+
         }
 
 

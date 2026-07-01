@@ -1,5 +1,6 @@
 import pandas as pd
 from pathlib import Path
+import numpy as np
 
 
 # =====================================================================
@@ -74,14 +75,14 @@ df.columns = df.columns.str.replace("_GM_", "", regex=False)
 # =====================================================================
 # 1. PARAMETRI DI TRAINING (Rimangono invariati)
 # =====================================================================
-TOTAL_TIMESTEPS = 300_000
+TOTAL_TIMESTEPS = 100_000
 learning_rate = [0.00003]
-n_steps = [200]
+n_steps = [500]
 early_stopping = None
-ACTION_SCALE = 0.05
+ACTION_SCALE = 0.01
 
 PPO_PARAMS = dict(
-    n_epochs        = 10,
+    n_epochs        = 30,
     gamma           = 0.99,
     gae_lambda      = 0.95,
     clip_range      = 0.2,
@@ -111,6 +112,10 @@ n_of_totali  = len(OF_NAMES)
 # Calcola i BOUNDS (min e max) estraendoli direttamente dai valori del dataset
 # Crea una lista di tuple (min, max) per ogni DOF trovato
 DOF_BOUNDS_ALL = [(float(df[col].min()), float(df[col].max())) for col in DOF_NAMES_ALL]
+OF_BOUNDS_ALL = [(float(df[col].min()), float(df[col].max())) for col in OF_NAMES]
+
+DATASET_DOF_ALL = df[DOF_NAMES_ALL].to_numpy(dtype=np.float32)
+N_DATASET_PROFILES = len(DATASET_DOF_ALL)
 
 print("DOF_BOUNDS_ALL", DOF_BOUNDS_ALL)
 
@@ -136,7 +141,7 @@ tolleranza_phi_psi_imposti = 0.005
 # 4. GESTIONE DEI DOF ATTIVI E COMBINAZIONI
 # =====================================================================
 # Di default, attiva TUTTI i DOF trovati nel dataset
-ACTIVE_DOF_INDICES = list(range(n_dof_totali))
+ACTIVE_DOF_INDICES = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 print("ACTIVE_DOF_INDICES", ACTIVE_DOF_INDICES)
 

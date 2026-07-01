@@ -16,7 +16,7 @@ from Report.Plot import plot_smith, plot_smith_zoom_reaction
 def task_1(use_delta):
 
     use_delta = use_delta
-    episode_length = 60
+    episode_length = 100
     task_1 = True
 
     prs = Presentation()
@@ -184,7 +184,7 @@ def task_2(use_delta):
         print("\n⚠️  Modalità DELTA attiva: il PPO ottimizzerà la differenza rispetto al CSI originale.")
     else:
         print ("\n⚠️  Modalità mapping completo: il PPO ottimizzerà direttamente il CSI senza considerare il delta.")
-    episode_length = 20
+    episode_length = 40
 
     # 1. Imposta il percorso del tuo dataset e la riga che vuoi analizzare
     DATABASE_DIR = Path(__file__).parent.resolve()
@@ -239,6 +239,10 @@ def task_2(use_delta):
             start_profile = row[DOF_NAMES_ALL].values.astype(np.float32).copy()
             start_of_originali = row[OF_NAMES].values.astype(np.float32)
             start_dof_dataset = start_profile.copy()
+            start_of_profilo = surrogate(start_dof_dataset)
+            print(f"start_of_profilo: {start_of_profilo}")
+
+            csi_originale = start_of_profilo[2]
 
             # Perturbazione del dof attivo (che si vuole ottimizzare)
             if perturbazione_dof_attivi == True:
@@ -292,10 +296,9 @@ def task_2(use_delta):
                     # 5. Avvia il Training (Task 2)
                     print(f"\n  Learning_rate attuale : {lr}\n")
                     model, best_dof, best_of, best_csi, model_ = train(
-
                         start_dof=start_profile,
                         learning_rate=lr, n_steps=n_step, batch_size=batch_size, ROW_INDEX=ROW_INDEX, use_delta =use_delta, episode_length=episode_length,
-                        ref_of=start_of_originali
+                        ref_of=start_of_profilo
                     )
 
                     print(best_of)
@@ -328,8 +331,8 @@ def task_2(use_delta):
                     beta_1_ottimale = float(best_dof[idx_beta1_reale])
                     beta_2_ottimale = float(best_dof[idx_beta2_reale])
 
-                    orig_phi = float(start_of_originali[idx_phi_reale])
-                    orig_psi = float(start_of_originali[idx_psi_reale])
+                    orig_phi = float(start_of_profilo[idx_phi_reale])
+                    orig_psi = float(start_of_profilo[idx_psi_reale])
 
 
 
@@ -381,7 +384,7 @@ def task_2(use_delta):
                     }
 
 
-                    aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_dof_dataset, start_of_originali,
+                    aggiungi_slide_iterazione(prs, parametri_iterazione, img_paths, row_idx, lr, best_dof, best_of, start_dof_dataset, start_of_profilo,
                                               alpha_ex_ottimale, alpha_in_ottimale, beta_1_ottimale, beta_2_ottimale)
 
                     aggiungi_smith(prs, task1=None)
@@ -395,7 +398,7 @@ def task_2(use_delta):
     pulisci_file_temporanei()
 
 if __name__ == "__main__":
-    task_1(True)
+    #task_1(True)
     #task_1(False)
-    #task_2(True)
+    task_2(True)
     #task_2(False)
